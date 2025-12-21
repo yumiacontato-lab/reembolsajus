@@ -1,6 +1,40 @@
 import type { Express, Request, Response } from "express";
+import multer from "multer";
+import path from "path";
+import fs from "fs";
 import { storage } from "./storage";
-import { protectedRoute, getAuth } from "./auth";
+import { protectedRoute } from "./auth";
+import { processUpload } from "./services/uploadProcessor";
+
+const uploadsDir = path.join(process.cwd(), "uploads");
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
+const upload = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => {
+      cb(null, uploadsDir);
+    },
+    filename: (_req, file, cb) => {
+      const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+      cb(null, uniqueSuffix + "-" + file.originalname);
+    },
+  }),
+  limits: {
+    fileSize: 10 * 1024 * 1024,
+  },
+  fileFilter: (_req, file, cb) => {
+    if (file.mimetype === "application/pdf") {
+      cb(null, true);
+    } else {
+      cb(new Error("Apenas arquivos PDF sao permitidos"));
+    }
+  },
+});
+
+const FREE_UPLOAD_LIMIT = 5;
+const MONTHLY_UPLOAD_LIMIT = 3;
 
 export function registerRoutes(app: Express): void {
   app.get("/api/health", (_req: Request, res: Response) => {
@@ -69,9 +103,6 @@ export function registerRoutes(app: Express): void {
       const hasActiveSubscription = subscription?.status === "active";
       const uploadsThisMonth = await storage.countUserUploadsThisMonth(userId);
 
-      const FREE_UPLOAD_LIMIT = 5;
-      const MONTHLY_UPLOAD_LIMIT = 3;
-
       let canUpload = false;
       let reason = "";
       let remainingUploads = 0;
@@ -80,21 +111,21 @@ export function registerRoutes(app: Express): void {
         if (user.freeUploadsUsed < FREE_UPLOAD_LIMIT) {
           canUpload = true;
           remainingUploads = FREE_UPLOAD_LIMIT - user.freeUploadsUsed;
-          reason = `Você tem ${remainingUploads} upload${remainingUploads > 1 ? 's' : ''} gratuito${remainingUploads > 1 ? 's' : ''} restante${remainingUploads > 1 ? 's' : ''}.`;
+          reason = `Voce tem ${remainingUploads} upload${remainingUploads > 1 ? 's' : ''} gratuito${remainingUploads > 1 ? 's' : ''} restante${remainingUploads > 1 ? 's' : ''}.`;
         } else {
           canUpload = false;
           remainingUploads = 0;
-          reason = "Você atingiu o limite de uploads gratuitos. Assine o plano para continuar.";
+          reason = "Voce atingiu o limite de uploads gratuitos. Assine o plano para continuar.";
         }
       } else {
         if (uploadsThisMonth < MONTHLY_UPLOAD_LIMIT) {
           canUpload = true;
           remainingUploads = MONTHLY_UPLOAD_LIMIT - uploadsThisMonth;
-          reason = `Você tem ${remainingUploads} upload${remainingUploads > 1 ? 's' : ''} restante${remainingUploads > 1 ? 's' : ''} este mês.`;
+          reason = `Voce tem ${remainingUploads} upload${remainingUploads > 1 ? 's' : ''} restante${remainingUploads > 1 ? 's' : ''} este mes.`;
         } else {
           canUpload = false;
           remainingUploads = 0;
-          reason = "Você atingiu o limite mensal de uploads. Aguarde o próximo ciclo de cobrança.";
+          reason = "Voce atingiu o limite mensal de uploads. Aguarde o proximo ciclo de cobranca.";
         }
       }
 
@@ -114,6 +145,71 @@ export function registerRoutes(app: Express): void {
     }
   });
 
+  app.post("/api/upload", protectedRoute, upload.single("file"), async (req: Request, res: Response) => {
+    try {
+      const userId = (req as any).userId;
+      const file = req.file;
+
+      if (!file) {
+        return res.status(400).json({ error: "Nenhum arquivo enviado" });
+      }
+
+      const user = await storage.getUser(userId);
+      if (!user) {
+        fs.unlinkSync(file.path);
+        return res.status(404).json({ error: "Usuario nao encontrado" });
+      }
+
+      const subscription = await storage.getSubscriptionByUserId(userId);
+      const hasActiveSubscription = subscription?.status === "active";
+      const uploadsThisMonth = await storage.countUserUploadsThisMonth(userId);
+
+      let canUpload = false;
+      if (!hasActiveSubscription) {
+        canUpload = user.freeUploadsUsed < FREE_UPLOAD_LIMIT;
+      } else {
+        canUpload = uploadsThisMonth < MONTHLY_UPLOAD_LIMIT;
+      }
+
+      if (!canUpload) {
+        fs.unlinkSync(file.path);
+        return res.status(403).json({
+          error: "Limite de uploads atingido",
+          needsSubscription: !hasActiveSubscription,
+        });
+      }
+
+      const uploadRecord = await storage.createUpload({
+        userId,
+        fileName: file.originalname,
+        fileSize: file.size,
+        filePath: file.path,
+        status: "pending",
+      });
+
+      if (!hasActiveSubscription) {
+        await storage.updateUserFreeUploads(userId, user.freeUploadsUsed + 1);
+      }
+
+      processUpload(uploadRecord.id, file.path).catch(err => {
+        console.error("Background processing failed:", err);
+      });
+
+      res.status(201).json({
+        id: uploadRecord.id,
+        fileName: uploadRecord.fileName,
+        status: uploadRecord.status,
+        message: "Upload recebido. Processamento iniciado.",
+      });
+    } catch (error) {
+      console.error("Error uploading file:", error);
+      if (req.file && fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path);
+      }
+      res.status(500).json({ error: "Erro ao processar upload" });
+    }
+  });
+
   app.get("/api/uploads", protectedRoute, async (req: Request, res: Response) => {
     try {
       const userId = (req as any).userId;
@@ -128,17 +224,17 @@ export function registerRoutes(app: Express): void {
   app.get("/api/upload/:id", protectedRoute, async (req: Request, res: Response) => {
     try {
       const userId = (req as any).userId;
-      const upload = await storage.getUpload(parseInt(req.params.id));
+      const uploadRecord = await storage.getUpload(parseInt(req.params.id));
 
-      if (!upload) {
+      if (!uploadRecord) {
         return res.status(404).json({ error: "Upload not found" });
       }
 
-      if (upload.userId !== userId) {
+      if (uploadRecord.userId !== userId) {
         return res.status(403).json({ error: "Access denied" });
       }
 
-      res.json(upload);
+      res.json(uploadRecord);
     } catch (error) {
       console.error("Error fetching upload:", error);
       res.status(500).json({ error: "Internal server error" });
@@ -150,11 +246,11 @@ export function registerRoutes(app: Express): void {
       const userId = (req as any).userId;
       const uploadId = parseInt(req.params.uploadId);
 
-      const upload = await storage.getUpload(uploadId);
-      if (!upload) {
+      const uploadRecord = await storage.getUpload(uploadId);
+      if (!uploadRecord) {
         return res.status(404).json({ error: "Upload not found" });
       }
-      if (upload.userId !== userId) {
+      if (uploadRecord.userId !== userId) {
         return res.status(403).json({ error: "Access denied" });
       }
 
@@ -218,5 +314,19 @@ export function registerRoutes(app: Express): void {
       console.error("Error fetching report:", error);
       res.status(500).json({ error: "Internal server error" });
     }
+  });
+
+  app.use((err: any, _req: Request, res: Response, _next: any) => {
+    if (err instanceof multer.MulterError) {
+      if (err.code === "LIMIT_FILE_SIZE") {
+        return res.status(400).json({ error: "Arquivo muito grande. O limite e 10MB." });
+      }
+      return res.status(400).json({ error: err.message });
+    }
+    if (err.message === "Apenas arquivos PDF sao permitidos") {
+      return res.status(400).json({ error: err.message });
+    }
+    console.error("Unhandled error:", err);
+    res.status(500).json({ error: "Internal server error" });
   });
 }
