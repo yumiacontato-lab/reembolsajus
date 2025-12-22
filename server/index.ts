@@ -5,7 +5,13 @@ import { createServer } from "http";
 import { clerkAuthMiddleware } from "./auth";
 
 const app = express();
-app.use(express.json());
+app.use((req, res, next) => {
+  if (req.originalUrl === '/api/webhook') {
+    next();
+  } else {
+    express.json()(req, res, next);
+  }
+});
 app.use(express.urlencoded({ extended: false }));
 app.use(clerkAuthMiddleware);
 

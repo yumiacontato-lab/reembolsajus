@@ -26,10 +26,12 @@ export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
   updateUserFreeUploads(id: string, count: number): Promise<User | undefined>;
+  updateUser(id: string, data: Partial<InsertUser>): Promise<User | undefined>;
 
   createSubscription(subscription: InsertSubscription): Promise<Subscription>;
   getSubscriptionByUserId(userId: string): Promise<Subscription | undefined>;
   updateSubscription(id: number, data: Partial<InsertSubscription>): Promise<Subscription | undefined>;
+  updateSubscriptionByStripeId(stripeId: string, data: Partial<InsertSubscription>): Promise<Subscription | undefined>;
 
   createUpload(upload: InsertUpload): Promise<Upload>;
   getUpload(id: number): Promise<Upload | undefined>;
@@ -75,6 +77,15 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
 
+  async updateUser(id: string, data: Partial<InsertUser>): Promise<User | undefined> {
+    const [updated] = await db
+      .update(users)
+      .set(data)
+      .where(eq(users.id, id))
+      .returning();
+    return updated;
+  }
+
   async createSubscription(subscription: InsertSubscription): Promise<Subscription> {
     const [created] = await db.insert(subscriptions).values(subscription).returning();
     return created;
@@ -93,6 +104,15 @@ export class DatabaseStorage implements IStorage {
       .update(subscriptions)
       .set({ ...data, updatedAt: new Date() })
       .where(eq(subscriptions.id, id))
+      .returning();
+    return updated;
+  }
+
+  async updateSubscriptionByStripeId(stripeId: string, data: Partial<InsertSubscription>): Promise<Subscription | undefined> {
+    const [updated] = await db
+      .update(subscriptions)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(subscriptions.stripeSubscriptionId, stripeId))
       .returning();
     return updated;
   }

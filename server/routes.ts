@@ -2,9 +2,11 @@ import type { Express, Request, Response } from "express";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
+import express from "express"; // Added import
 import { storage } from "./storage";
 import { protectedRoute } from "./auth";
 import { processUpload } from "./services/uploadProcessor";
+import { stripe } from "./stripe"; // Added import
 
 const uploadsDir = path.join(process.cwd(), "uploads");
 if (!fs.existsSync(uploadsDir)) {
@@ -35,10 +37,156 @@ const upload = multer({
 
 const FREE_UPLOAD_LIMIT = 5;
 const MONTHLY_UPLOAD_LIMIT = 3;
+import { generateReportPDF } from "./services/reportGenerator";
+import rateLimit from "express-rate-limit";
+
+// Rate limiting configuration
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // Limit each IP to 100 requests per `window` (here, per 15 minutes)
+  standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+  legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+  message: { error: "Muitas requisicoes, tente novamente mais tarde." }
+});
+
+const uploadLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 10, // Limit uploads to 10 per hour per IP (as a safety net)
+  message: { error: "Muitos uploads, tente novamente mais tarde." }
+});
 
 export function registerRoutes(app: Express): void {
+  // Global API rate limiting
+  app.use("/api/", apiLimiter);
+
   app.get("/api/health", (_req: Request, res: Response) => {
     res.json({ status: "ok", timestamp: new Date().toISOString() });
+  });
+
+  // Stripe Checkout Session
+  app.post("/api/create-checkout-session", protectedRoute, async (req: Request, res: Response) => {
+    try {
+      const userId = (req as any).userId;
+      const user = await storage.getUser(userId);
+
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      let customerId = user.stripeCustomerId;
+      if (!customerId) {
+        const customer = await stripe.customers.create({
+          email: user.email,
+          metadata: { userId },
+        });
+        customerId = customer.id;
+        await storage.updateUser(userId, { stripeCustomerId: customerId });
+      }
+
+      const session = await stripe.checkout.sessions.create({
+        customer: customerId,
+        line_items: [
+          {
+            price: process.env.STRIPE_PRICE_ID || "price_1Qfo3eP93j8Rj3XyXXXXXX", // Placeholder, requires env var
+            quantity: 1,
+          },
+        ],
+        mode: "subscription",
+        success_url: `${req.headers.origin}/?success=true`,
+        cancel_url: `${req.headers.origin}/?canceled=true`,
+        metadata: { userId },
+      });
+
+      res.json({ url: session.url });
+    } catch (error: any) {
+      console.error("Error creating checkout session:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Create Customer Portal Session
+  app.post("/api/create-portal-session", protectedRoute, async (req: Request, res: Response) => {
+    try {
+      const userId = (req as any).userId;
+      const user = await storage.getUser(userId);
+
+      if (!user || !user.stripeCustomerId) {
+        return res.status(404).json({ error: "User or Stripe Customer not found" });
+      }
+
+      const session = await stripe.billingPortal.sessions.create({
+        customer: user.stripeCustomerId,
+        return_url: `${req.headers.origin}/billing`,
+      });
+
+      res.json({ url: session.url });
+    } catch (error: any) {
+      console.error("Error creating portal session:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Stripe Webhook
+  app.post("/api/webhook", express.raw({ type: "application/json" }), async (req: Request, res: Response) => {
+    const signature = req.headers["stripe-signature"];
+
+    let event;
+
+    try {
+      event = stripe.webhooks.constructEvent(
+        req.body,
+        signature as string,
+        process.env.STRIPE_WEBHOOK_SECRET || ""
+      );
+    } catch (err: any) {
+      console.error(`Webhook signature verification failed: ${err.message}`);
+      return res.status(400).send(`Webhook Error: ${err.message}`);
+    }
+
+    try {
+      switch (event.type) {
+        case "checkout.session.completed": {
+          const session = event.data.object as any;
+          const userId = session.metadata?.userId;
+          const subscriptionId = session.subscription;
+
+          if (userId && subscriptionId) {
+            const subscription = await stripe.subscriptions.retrieve(subscriptionId) as any;
+
+            await storage.createSubscription({
+              userId,
+              stripeSubscriptionId: subscriptionId,
+              status: subscription.status as any,
+              plan: "pro", // OR determine based on price
+              currentPeriodStart: new Date(subscription.current_period_start * 1000),
+              currentPeriodEnd: new Date(subscription.current_period_end * 1000),
+            });
+          }
+          break;
+        }
+        case "customer.subscription.updated": {
+          const subscription = event.data.object as any;
+          await storage.updateSubscriptionByStripeId(subscription.id, {
+            status: subscription.status,
+            currentPeriodStart: new Date(subscription.current_period_start * 1000),
+            currentPeriodEnd: new Date(subscription.current_period_end * 1000),
+          });
+          break;
+        }
+        case "customer.subscription.deleted": {
+          const subscription = event.data.object as any;
+          await storage.updateSubscriptionByStripeId(subscription.id, {
+            status: "canceled",
+          });
+          break;
+        }
+      }
+    } catch (error) {
+      console.error("Webhook processing error:", error);
+      // Don't fail the webhook response or Stripe will retry indefinitely
+    }
+
+    res.json({ received: true });
   });
 
   app.post("/api/user/sync", protectedRoute, async (req: Request, res: Response) => {
@@ -145,7 +293,7 @@ export function registerRoutes(app: Express): void {
     }
   });
 
-  app.post("/api/upload", protectedRoute, upload.single("file"), async (req: Request, res: Response) => {
+  app.post("/api/upload", protectedRoute, uploadLimiter, upload.single("file"), async (req: Request, res: Response) => {
     try {
       const userId = (req as any).userId;
       const file = req.file;
@@ -296,10 +444,70 @@ export function registerRoutes(app: Express): void {
     }
   });
 
-  app.get("/api/report/:id", protectedRoute, async (req: Request, res: Response) => {
+  app.post("/api/report/:uploadId/generate", protectedRoute, async (req: Request, res: Response) => {
     try {
       const userId = (req as any).userId;
-      const report = await storage.getReport(parseInt(req.params.id));
+      const uploadId = parseInt(req.params.uploadId);
+
+      const user = await storage.getUser(userId);
+      const uploadRecord = await storage.getUpload(uploadId);
+
+      if (!user || !uploadRecord) {
+        return res.status(404).json({ error: "Not found" });
+      }
+
+      if (uploadRecord.userId !== userId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+
+      const transactions = await storage.getTransactionsByUploadId(uploadId);
+      const reimbursableTransactions = transactions.filter(t => t.category === 'reimbursable' && t.isIncluded);
+
+      const totalAmount = reimbursableTransactions.reduce((sum, t) => sum + parseFloat(t.amount.toString()), 0);
+      const itemCount = reimbursableTransactions.length;
+
+      const clientsSummary: Record<string, number> = {};
+      reimbursableTransactions.forEach(t => {
+        const client = t.clientName || "Não Identificado";
+        clientsSummary[client] = (clientsSummary[client] || 0) + parseFloat(t.amount.toString());
+      });
+
+      const fileName = `relatorio_${uploadRecord.fileName.replace('.pdf', '')}_${Date.now()}.pdf`;
+      const filePath = path.join(uploadsDir, fileName);
+
+      // Create Report Record First
+      const report = await storage.createReport({
+        userId,
+        uploadId,
+        fileName,
+        filePath,
+        totalAmount: totalAmount as any,
+        itemCount,
+        clientsSummary
+      });
+
+      // Generate PDF
+      await generateReportPDF(
+        { report, transactions: reimbursableTransactions, user },
+        filePath
+      );
+
+      // Update upload status
+      await storage.updateUpload(uploadId, { status: "completed" });
+
+      res.status(201).json(report);
+    } catch (error: any) {
+      console.error("Error generating report:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/report/:id/download", protectedRoute, async (req: Request, res: Response) => {
+    try {
+      const userId = (req as any).userId;
+      const reportId = parseInt(req.params.id);
+
+      const report = await storage.getReport(reportId);
 
       if (!report) {
         return res.status(404).json({ error: "Report not found" });
@@ -309,9 +517,13 @@ export function registerRoutes(app: Express): void {
         return res.status(403).json({ error: "Access denied" });
       }
 
-      res.json(report);
+      if (!fs.existsSync(report.filePath)) {
+        return res.status(404).json({ error: "File not found on server" });
+      }
+
+      res.download(report.filePath, report.fileName);
     } catch (error) {
-      console.error("Error fetching report:", error);
+      console.error("Error downloading report:", error);
       res.status(500).json({ error: "Internal server error" });
     }
   });

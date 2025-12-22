@@ -7,11 +7,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useUploadEligibility } from "@/hooks/useUserSync";
-import { 
-  Upload, 
-  FileText, 
-  Clock, 
-  CheckCircle2, 
+import { apiRequest } from "@/lib/queryClient";
+import {
+  Upload,
+  FileText,
+  Clock,
+  CheckCircle2,
   AlertCircle,
   ArrowRight,
   TrendingUp,
@@ -62,7 +63,7 @@ const statusConfig = {
 const Dashboard = () => {
   const { user } = useUser();
   const { data: eligibility, isLoading: eligibilityLoading } = useUploadEligibility();
-  
+
   const { data: uploads, isLoading: uploadsLoading } = useQuery<UploadType[]>({
     queryKey: ["/api/uploads"],
   });
@@ -75,18 +76,30 @@ const Dashboard = () => {
 
   const totalItems = uploads?.reduce((sum, u) => sum + (u.totalItems || 0), 0) || 0;
 
-  const displayLimit = eligibility?.hasActiveSubscription 
-    ? eligibility.monthlyLimit 
+  const displayLimit = eligibility?.hasActiveSubscription
+    ? eligibility.monthlyLimit
     : eligibility?.freeUploadsLimit || 5;
-  
-  const displayUsed = eligibility?.hasActiveSubscription 
-    ? eligibility.uploadsThisMonth 
+
+  const displayUsed = eligibility?.hasActiveSubscription
+    ? eligibility.uploadsThisMonth
     : eligibility?.freeUploadsUsed || 0;
+
+  const handleSubscribe = async () => {
+    try {
+      const res = await apiRequest("POST", "/api/create-checkout-session");
+      const data = await res.json();
+      if (data.url) {
+        window.location.href = data.url;
+      }
+    } catch (err) {
+      console.error("Subscription error:", err);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-background">
       <Header />
-      
+
       <main className="pt-24 pb-12">
         <div className="container mx-auto px-4 sm:px-6">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
@@ -98,9 +111,9 @@ const Dashboard = () => {
                 Gerencie seus extratos e recupere suas custas.
               </p>
             </div>
-            <Button 
-              variant="accent" 
-              size="lg" 
+            <Button
+              variant="accent"
+              size="lg"
               asChild
               disabled={!eligibility?.canUpload}
               data-testid="button-new-upload"
@@ -125,11 +138,9 @@ const Dashboard = () => {
                   )}
                 </div>
                 {!eligibility.hasActiveSubscription && (
-                  <Button variant="accent" asChild data-testid="button-subscribe">
-                    <Link to="/pricing">
-                      <Crown className="h-4 w-4" />
-                      Assinar Agora
-                    </Link>
+                  <Button variant="accent" onClick={handleSubscribe} data-testid="button-subscribe">
+                    <Crown className="h-4 w-4 mr-2" />
+                    Assinar Agora
                   </Button>
                 )}
               </CardContent>
@@ -166,7 +177,7 @@ const Dashboard = () => {
                       </div>
                     </div>
                     <div className="mt-4 h-2 bg-muted rounded-full overflow-hidden">
-                      <div 
+                      <div
                         className="h-full bg-primary transition-all"
                         style={{ width: `${Math.min((displayUsed / displayLimit) * 100, 100)}%` }}
                       />
@@ -284,7 +295,7 @@ const Dashboard = () => {
                     const StatusIcon = status.icon;
 
                     return (
-                      <div 
+                      <div
                         key={upload.id}
                         className="flex flex-wrap items-center justify-between gap-4 p-4 rounded-lg border border-border hover-elevate"
                         data-testid={`row-upload-${upload.id}`}

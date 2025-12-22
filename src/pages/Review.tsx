@@ -10,8 +10,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { 
-  FileText, 
+import {
+  FileText,
   Download,
   Filter,
   Check,
@@ -45,7 +45,7 @@ const Review = () => {
   const { uploadId } = useParams();
   const navigate = useNavigate();
   const { toast } = useToast();
-  
+
   const [selectedItems, setSelectedItems] = useState<number[]>([]);
   const [filter, setFilter] = useState<FilterType>("all");
   const [clientNames, setClientNames] = useState<Record<number, string>>({});
@@ -98,8 +98,8 @@ const Review = () => {
     .reduce((sum, item) => sum + Math.abs(parseFloat(item.amount)), 0) || 0;
 
   const toggleItem = (id: number) => {
-    setSelectedItems(prev => 
-      prev.includes(id) 
+    setSelectedItems(prev =>
+      prev.includes(id)
         ? prev.filter(i => i !== id)
         : [...prev, id]
     );
@@ -137,10 +137,11 @@ const Review = () => {
     setIsGenerating(true);
 
     try {
+      // First save any pending changes
       for (const tx of transactions || []) {
         const isSelected = selectedItems.includes(tx.id);
         const clientName = clientNames[tx.id] || null;
-        
+
         if (tx.isIncluded !== isSelected || tx.clientName !== clientName) {
           await updateMutation.mutateAsync({
             id: tx.id,
@@ -149,16 +150,21 @@ const Review = () => {
         }
       }
 
+      // Then generate the report
+      const res = await apiRequest("POST", `/api/report/${uploadId}/generate`);
+      const report = await res.json();
+
       toast({
-        title: "Alteracoes salvas!",
-        description: "Suas selecoes foram salvas com sucesso.",
+        title: "Sucesso!",
+        description: "Relatório gerado com sucesso.",
       });
 
-      navigate(`/dashboard`);
+      navigate(`/report/${report.id}`);
     } catch (error) {
+      console.error(error);
       toast({
-        title: "Erro ao salvar",
-        description: "Ocorreu um erro ao salvar as alteracoes.",
+        title: "Erro ao gerar",
+        description: "Ocorreu um erro ao gerar o relatório.",
         variant: "destructive",
       });
     } finally {
@@ -171,7 +177,7 @@ const Review = () => {
   return (
     <div className="min-h-screen bg-background">
       <Header />
-      
+
       <main className="pt-24 pb-12">
         <div className="container mx-auto px-4 sm:px-6">
           <div className="mb-6">
@@ -209,8 +215,8 @@ const Review = () => {
                   R$ {selectedTotal.toFixed(2).replace('.', ',')}
                 </p>
               </div>
-              <Button 
-                variant="accent" 
+              <Button
+                variant="accent"
                 size="lg"
                 onClick={handleGenerateReport}
                 disabled={isGenerating || isLoading}
@@ -230,32 +236,32 @@ const Review = () => {
 
           <div className="flex flex-wrap items-center gap-2 mb-6">
             <Filter className="h-4 w-4 text-muted-foreground" />
-            <Button 
-              variant={filter === "all" ? "default" : "outline"} 
+            <Button
+              variant={filter === "all" ? "default" : "outline"}
               size="sm"
               onClick={() => setFilter("all")}
               data-testid="button-filter-all"
             >
               Todos ({transactions?.length || 0})
             </Button>
-            <Button 
-              variant={filter === "reimbursable" ? "default" : "outline"} 
+            <Button
+              variant={filter === "reimbursable" ? "default" : "outline"}
               size="sm"
               onClick={() => setFilter("reimbursable")}
               data-testid="button-filter-reimbursable"
             >
               Reembolsaveis ({transactions?.filter(i => i.category === "reimbursable").length || 0})
             </Button>
-            <Button 
-              variant={filter === "review" ? "default" : "outline"} 
+            <Button
+              variant={filter === "review" ? "default" : "outline"}
               size="sm"
               onClick={() => setFilter("review")}
               data-testid="button-filter-review"
             >
               Revisar ({transactions?.filter(i => i.category === "review").length || 0})
             </Button>
-            <Button 
-              variant={filter === "not_reimbursable" ? "default" : "outline"} 
+            <Button
+              variant={filter === "not_reimbursable" ? "default" : "outline"}
               size="sm"
               onClick={() => setFilter("not_reimbursable")}
               data-testid="button-filter-not-reimbursable"
@@ -332,11 +338,10 @@ const Review = () => {
                         const isSelected = selectedItems.includes(item.id);
 
                         return (
-                          <tr 
+                          <tr
                             key={item.id}
-                            className={`border-b border-border last:border-0 transition-colors ${
-                              isSelected ? "bg-accent/5" : "hover:bg-muted/50"
-                            }`}
+                            className={`border-b border-border last:border-0 transition-colors ${isSelected ? "bg-accent/5" : "hover:bg-muted/50"
+                              }`}
                             data-testid={`row-transaction-${item.id}`}
                           >
                             <td className="py-4 px-4">
