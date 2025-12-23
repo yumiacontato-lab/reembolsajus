@@ -1,10 +1,17 @@
 import OpenAI from "openai";
 import type { ParsedTransaction } from "./pdfParser";
 
-const openai = new OpenAI({
-  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
-  baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
-});
+let openai: OpenAI | null = null;
+
+function getOpenAI() {
+  if (!openai) {
+    openai = new OpenAI({
+      apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || "dummy_key",
+      baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+    });
+  }
+  return openai;
+}
 
 export interface ClassifiedTransaction {
   date: Date;
@@ -156,7 +163,12 @@ Tags disponiveis: "Custas Processuais", "Cartorio", "Transporte", "Deslocamento"
 Transacoes para classificar:
 ${reviewItems.map((t, i) => `${i}. ${t.description} - R$ ${Math.abs(t.amount).toFixed(2)}`).join('\n')}`;
 
-    const response = await openai.chat.completions.create({
+    if (!process.env.AI_INTEGRATIONS_OPENAI_API_KEY) {
+      console.warn("AI_INTEGRATIONS_OPENAI_API_KEY is not set. Skipping AI classification.");
+      return keywordClassified;
+    }
+
+    const response = await getOpenAI().chat.completions.create({
       model: "gpt-4o-mini",
       messages: [{ role: "user", content: prompt }],
       temperature: 0.1,

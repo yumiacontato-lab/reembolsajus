@@ -1,5 +1,5 @@
 import { Pool, neonConfig } from "@neondatabase/serverless";
-import { drizzle } from "drizzle-orm/neon-serverless";
+import { drizzle } from "drizzle-orm/node-postgres";
 import ws from "ws";
 import * as schema from "../shared/schema";
 
@@ -11,5 +11,16 @@ if (!process.env.DATABASE_URL) {
   );
 }
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+const isNeon = process.env.DATABASE_URL.includes("neon.tech") || process.env.DATABASE_URL.includes("replit");
+
+let pool;
+if (isNeon) {
+  pool = new Pool({ connectionString: process.env.DATABASE_URL });
+} else {
+  // Local Postgres
+  const { Pool: PgPool } = await import("pg");
+  pool = new PgPool({ connectionString: process.env.DATABASE_URL });
+}
+
 export const db = drizzle(pool, { schema });
+
