@@ -89,7 +89,7 @@ function getErrorMessage(err: unknown): string {
     await serveStatic(app);
   }
 
-  const port = 5001;
+  const port = 5000;
   server.listen(port, "0.0.0.0", () => {
     console.log(`Server running on port ${port}`);
   });
