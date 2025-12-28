@@ -54,7 +54,7 @@ const Signup = () => {
             routing="path" 
             path="/signup" 
             signInUrl="/login"
-            afterSignUpUrl="/dashboard"
+            fallbackRedirectUrl="/dashboard"
             appearance={{
               elements: {
                 formButtonPrimary: "bg-accent hover:bg-accent/90 text-accent-foreground",

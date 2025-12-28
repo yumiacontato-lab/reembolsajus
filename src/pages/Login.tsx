@@ -29,7 +29,7 @@ const Login = () => {
             routing="path" 
             path="/login" 
             signUpUrl="/signup"
-            afterSignInUrl="/dashboard"
+            fallbackRedirectUrl="/dashboard"
             appearance={{
               elements: {
                 formButtonPrimary: "bg-primary hover:bg-primary/90",
