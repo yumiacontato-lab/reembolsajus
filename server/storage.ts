@@ -1,4 +1,4 @@
-import { db } from "./db";
+import { getDb } from "./db";
 import { eq, and, desc, gte, lt } from "drizzle-orm";
 import {
   users,
@@ -54,21 +54,25 @@ export interface IStorage {
 
 export class DatabaseStorage implements IStorage {
   async createUser(user: InsertUser): Promise<User> {
+    const db = getDb();
     const [created] = await db.insert(users).values(user).returning();
     return created;
   }
 
   async getUser(id: string): Promise<User | undefined> {
+    const db = getDb();
     const [user] = await db.select().from(users).where(eq(users.id, id));
     return user;
   }
 
   async getUserByEmail(email: string): Promise<User | undefined> {
+    const db = getDb();
     const [user] = await db.select().from(users).where(eq(users.email, email));
     return user;
   }
 
   async updateUserFreeUploads(id: string, count: number): Promise<User | undefined> {
+    const db = getDb();
     const [updated] = await db
       .update(users)
       .set({ freeUploadsUsed: count })
@@ -78,6 +82,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateUser(id: string, data: Partial<InsertUser>): Promise<User | undefined> {
+    const db = getDb();
     const [updated] = await db
       .update(users)
       .set(data)
@@ -87,11 +92,13 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createSubscription(subscription: InsertSubscription): Promise<Subscription> {
+    const db = getDb();
     const [created] = await db.insert(subscriptions).values(subscription).returning();
     return created;
   }
 
   async getSubscriptionByUserId(userId: string): Promise<Subscription | undefined> {
+    const db = getDb();
     const [sub] = await db
       .select()
       .from(subscriptions)
@@ -100,6 +107,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateSubscription(id: number, data: Partial<InsertSubscription>): Promise<Subscription | undefined> {
+    const db = getDb();
     const [updated] = await db
       .update(subscriptions)
       .set({ ...data, updatedAt: new Date() })
@@ -109,6 +117,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateSubscriptionByStripeId(stripeId: string, data: Partial<InsertSubscription>): Promise<Subscription | undefined> {
+    const db = getDb();
     const [updated] = await db
       .update(subscriptions)
       .set({ ...data, updatedAt: new Date() })
@@ -118,16 +127,19 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createUpload(upload: InsertUpload): Promise<Upload> {
+    const db = getDb();
     const [created] = await db.insert(uploads).values(upload).returning();
     return created;
   }
 
   async getUpload(id: number): Promise<Upload | undefined> {
+    const db = getDb();
     const [upload] = await db.select().from(uploads).where(eq(uploads.id, id));
     return upload;
   }
 
   async getUploadsByUserId(userId: string): Promise<Upload[]> {
+    const db = getDb();
     return db
       .select()
       .from(uploads)
@@ -136,6 +148,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateUpload(id: number, data: Partial<InsertUpload>): Promise<Upload | undefined> {
+    const db = getDb();
     const [updated] = await db
       .update(uploads)
       .set(data)
@@ -145,6 +158,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async countUserUploadsThisMonth(userId: string): Promise<number> {
+    const db = getDb();
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
@@ -163,16 +177,19 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createTransaction(transaction: InsertTransaction): Promise<Transaction> {
+    const db = getDb();
     const [created] = await db.insert(transactions).values(transaction).returning();
     return created;
   }
 
   async createTransactions(transactionList: InsertTransaction[]): Promise<Transaction[]> {
+    const db = getDb();
     if (transactionList.length === 0) return [];
     return db.insert(transactions).values(transactionList).returning();
   }
 
   async getTransactionsByUploadId(uploadId: number): Promise<Transaction[]> {
+    const db = getDb();
     return db
       .select()
       .from(transactions)
@@ -181,6 +198,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateTransaction(id: number, data: Partial<InsertTransaction>): Promise<Transaction | undefined> {
+    const db = getDb();
     const [updated] = await db
       .update(transactions)
       .set({ ...data, updatedAt: new Date(), editedByUser: true })
@@ -190,20 +208,24 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteTransaction(id: number): Promise<void> {
+    const db = getDb();
     await db.delete(transactions).where(eq(transactions.id, id));
   }
 
   async createReport(report: InsertReport): Promise<Report> {
+    const db = getDb();
     const [created] = await db.insert(reports).values(report).returning();
     return created;
   }
 
   async getReport(id: number): Promise<Report | undefined> {
+    const db = getDb();
     const [report] = await db.select().from(reports).where(eq(reports.id, id));
     return report;
   }
 
   async getReportsByUserId(userId: string): Promise<Report[]> {
+    const db = getDb();
     return db
       .select()
       .from(reports)
@@ -212,6 +234,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createAuditLog(log: InsertAuditLog): Promise<AuditLog> {
+    const db = getDb();
     const [created] = await db.insert(auditLogs).values(log).returning();
     return created;
   }
