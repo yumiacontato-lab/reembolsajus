@@ -89,7 +89,10 @@ function getErrorMessage(err: unknown): string {
     await serveStatic(app);
   }
 
-  const port = Number(process.env.PORT) || 5000;
+  const port =
+    process.env.NODE_ENV === "development"
+      ? 5000
+      : Number(process.env.PORT) || 5000;
   server.listen(port, "0.0.0.0", () => {
     console.log(`Server running on port ${port}`);
   });
