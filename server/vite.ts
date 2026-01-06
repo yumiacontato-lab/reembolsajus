@@ -1,4 +1,5 @@
 import type { Express } from "express";
+import type { Server as HttpServer } from "http";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -7,7 +8,7 @@ import { createServer as createViteServer } from "vite";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-export async function setupVite(app: Express, server: any) {
+export async function setupVite(app: Express, server: HttpServer) {
   const vite = await createViteServer({
     server: {
       middlewareMode: true,

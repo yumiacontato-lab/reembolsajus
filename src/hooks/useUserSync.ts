@@ -26,7 +26,7 @@ export function useUserSync() {
         syncMutation.mutate({ email, name });
       }
     }
-  }, [isSignedIn, user]);
+  }, [isSignedIn, user, syncMutation]);
 
   return {
     isSyncing: syncMutation.isPending,

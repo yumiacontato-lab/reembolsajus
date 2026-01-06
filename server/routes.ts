@@ -1,16 +1,58 @@
-import type { Express, Request, Response } from "express";
+import type { Express, NextFunction, Request, Response } from "express";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
-import express from "express"; // Added import
+import express from "express";
+import rateLimit from "express-rate-limit";
+import type Stripe from "stripe";
 import { storage } from "./storage";
 import { protectedRoute } from "./auth";
 import { processUpload } from "./services/uploadProcessor";
-import { stripe } from "./stripe"; // Added import
+import { stripe } from "./stripe";
+import { generateReportPDF } from "./services/reportGenerator";
 
 const uploadsDir = path.join(process.cwd(), "uploads");
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
+function sanitizeFilename(fileName: string): string {
+  const base = path.basename(fileName);
+  return base.replace(/[^\w.\-()+ ]+/g, "_");
+}
+
+function requireUserId(req: Request): string {
+  if (typeof req.userId !== "string" || !req.userId) {
+    const err = new Error("Unauthorized");
+    (err as Error & { status?: number }).status = 401;
+    throw err;
+  }
+  return req.userId;
+}
+
+function getErrorMessage(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (typeof err === "string") return err;
+  return "Internal server error";
+}
+
+function mapStripeSubscriptionStatus(
+  status: Stripe.Subscription.Status,
+): "active" | "canceled" | "past_due" | "unpaid" | "trialing" {
+  switch (status) {
+    case "active":
+      return "active";
+    case "canceled":
+      return "canceled";
+    case "past_due":
+      return "past_due";
+    case "unpaid":
+      return "unpaid";
+    case "trialing":
+      return "trialing";
+    default:
+      return "unpaid";
+  }
 }
 
 const upload = multer({
@@ -20,14 +62,16 @@ const upload = multer({
     },
     filename: (_req, file, cb) => {
       const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
-      cb(null, uniqueSuffix + "-" + file.originalname);
+      cb(null, uniqueSuffix + "-" + sanitizeFilename(file.originalname));
     },
   }),
   limits: {
     fileSize: 10 * 1024 * 1024,
   },
   fileFilter: (_req, file, cb) => {
-    if (file.mimetype === "application/pdf") {
+    const isPdfMime = file.mimetype === "application/pdf";
+    const isPdfExt = file.originalname.toLowerCase().endsWith(".pdf");
+    if (isPdfMime && isPdfExt) {
       cb(null, true);
     } else {
       cb(new Error("Apenas arquivos PDF sao permitidos"));
@@ -37,8 +81,6 @@ const upload = multer({
 
 const FREE_UPLOAD_LIMIT = 5;
 const MONTHLY_UPLOAD_LIMIT = 3;
-import { generateReportPDF } from "./services/reportGenerator";
-import rateLimit from "express-rate-limit";
 
 // Rate limiting configuration
 const apiLimiter = rateLimit({
@@ -66,7 +108,7 @@ export function registerRoutes(app: Express): void {
   // Stripe Checkout Session
   app.post("/api/create-checkout-session", protectedRoute, async (req: Request, res: Response) => {
     try {
-      const userId = (req as any).userId;
+      const userId = requireUserId(req);
       const user = await storage.getUser(userId);
 
       if (!user) {
@@ -98,16 +140,16 @@ export function registerRoutes(app: Express): void {
       });
 
       res.json({ url: session.url });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Error creating checkout session:", error);
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ error: getErrorMessage(error) });
     }
   });
 
   // Create Customer Portal Session
   app.post("/api/create-portal-session", protectedRoute, async (req: Request, res: Response) => {
     try {
-      const userId = (req as any).userId;
+      const userId = requireUserId(req);
       const user = await storage.getUser(userId);
 
       if (!user || !user.stripeCustomerId) {
@@ -120,43 +162,51 @@ export function registerRoutes(app: Express): void {
       });
 
       res.json({ url: session.url });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Error creating portal session:", error);
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ error: getErrorMessage(error) });
     }
   });
 
   // Stripe Webhook
   app.post("/api/webhook", express.raw({ type: "application/json" }), async (req: Request, res: Response) => {
-    const signature = req.headers["stripe-signature"];
+    const signatureHeader = req.headers["stripe-signature"];
+    const signature = Array.isArray(signatureHeader) ? signatureHeader[0] : signatureHeader;
+    if (!signature) {
+      return res.status(400).send("Webhook Error: Missing stripe-signature header");
+    }
 
-    let event;
+    let event: Stripe.Event;
 
     try {
       event = stripe.webhooks.constructEvent(
-        req.body,
-        signature as string,
+        req.body as Buffer,
+        signature,
         process.env.STRIPE_WEBHOOK_SECRET || ""
       );
-    } catch (err: any) {
-      console.error(`Webhook signature verification failed: ${err.message}`);
-      return res.status(400).send(`Webhook Error: ${err.message}`);
+    } catch (err: unknown) {
+      const message = getErrorMessage(err);
+      console.error(`Webhook signature verification failed: ${message}`);
+      return res.status(400).send(`Webhook Error: ${message}`);
     }
 
     try {
       switch (event.type) {
         case "checkout.session.completed": {
-          const session = event.data.object as any;
+          const session = event.data.object as Stripe.Checkout.Session;
           const userId = session.metadata?.userId;
-          const subscriptionId = session.subscription;
+          const subscriptionId =
+            typeof session.subscription === "string"
+              ? session.subscription
+              : session.subscription?.id;
 
           if (userId && subscriptionId) {
-            const subscription = await stripe.subscriptions.retrieve(subscriptionId) as any;
+            const subscription = await stripe.subscriptions.retrieve(subscriptionId);
 
             await storage.createSubscription({
               userId,
               stripeSubscriptionId: subscriptionId,
-              status: subscription.status as any,
+              status: mapStripeSubscriptionStatus(subscription.status),
               plan: "pro", // OR determine based on price
               currentPeriodStart: new Date(subscription.current_period_start * 1000),
               currentPeriodEnd: new Date(subscription.current_period_end * 1000),
@@ -165,16 +215,16 @@ export function registerRoutes(app: Express): void {
           break;
         }
         case "customer.subscription.updated": {
-          const subscription = event.data.object as any;
+          const subscription = event.data.object as Stripe.Subscription;
           await storage.updateSubscriptionByStripeId(subscription.id, {
-            status: subscription.status,
+            status: mapStripeSubscriptionStatus(subscription.status),
             currentPeriodStart: new Date(subscription.current_period_start * 1000),
             currentPeriodEnd: new Date(subscription.current_period_end * 1000),
           });
           break;
         }
         case "customer.subscription.deleted": {
-          const subscription = event.data.object as any;
+          const subscription = event.data.object as Stripe.Subscription;
           await storage.updateSubscriptionByStripeId(subscription.id, {
             status: "canceled",
           });
@@ -191,14 +241,14 @@ export function registerRoutes(app: Express): void {
 
   app.post("/api/user/sync", protectedRoute, async (req: Request, res: Response) => {
     try {
-      const userId = (req as any).userId;
+      const userId = requireUserId(req);
       const { email, name } = req.body;
 
       if (!email) {
         return res.status(400).json({ error: "Email is required" });
       }
 
-      let user = await storage.getUser(userId);
+      const user = await storage.getUser(userId);
 
       if (!user) {
         user = await storage.createUser({
@@ -217,8 +267,8 @@ export function registerRoutes(app: Express): void {
 
   app.get("/api/user/me", protectedRoute, async (req: Request, res: Response) => {
     try {
-      const userId = (req as any).userId;
-      let user = await storage.getUser(userId);
+      const userId = requireUserId(req);
+      const user = await storage.getUser(userId);
 
       if (!user) {
         return res.status(404).json({ error: "User not found. Please sync your account first." });
@@ -240,7 +290,7 @@ export function registerRoutes(app: Express): void {
 
   app.get("/api/user/upload-eligibility", protectedRoute, async (req: Request, res: Response) => {
     try {
-      const userId = (req as any).userId;
+      const userId = requireUserId(req);
       const user = await storage.getUser(userId);
 
       if (!user) {
@@ -295,7 +345,7 @@ export function registerRoutes(app: Express): void {
 
   app.post("/api/upload", protectedRoute, uploadLimiter, upload.single("file"), async (req: Request, res: Response) => {
     try {
-      const userId = (req as any).userId;
+      const userId = requireUserId(req);
       const file = req.file;
 
       if (!file) {
@@ -360,7 +410,7 @@ export function registerRoutes(app: Express): void {
 
   app.get("/api/uploads", protectedRoute, async (req: Request, res: Response) => {
     try {
-      const userId = (req as any).userId;
+      const userId = requireUserId(req);
       const uploads = await storage.getUploadsByUserId(userId);
       res.json(uploads);
     } catch (error) {
@@ -371,7 +421,7 @@ export function registerRoutes(app: Express): void {
 
   app.get("/api/upload/:id", protectedRoute, async (req: Request, res: Response) => {
     try {
-      const userId = (req as any).userId;
+      const userId = requireUserId(req);
       const uploadRecord = await storage.getUpload(parseInt(req.params.id));
 
       if (!uploadRecord) {
@@ -391,7 +441,7 @@ export function registerRoutes(app: Express): void {
 
   app.get("/api/transactions/:uploadId", protectedRoute, async (req: Request, res: Response) => {
     try {
-      const userId = (req as any).userId;
+      const userId = requireUserId(req);
       const uploadId = parseInt(req.params.uploadId);
 
       const uploadRecord = await storage.getUpload(uploadId);
@@ -435,7 +485,7 @@ export function registerRoutes(app: Express): void {
 
   app.get("/api/reports", protectedRoute, async (req: Request, res: Response) => {
     try {
-      const userId = (req as any).userId;
+      const userId = requireUserId(req);
       const reports = await storage.getReportsByUserId(userId);
       res.json(reports);
     } catch (error) {
@@ -446,7 +496,7 @@ export function registerRoutes(app: Express): void {
 
   app.post("/api/report/:uploadId/generate", protectedRoute, async (req: Request, res: Response) => {
     try {
-      const userId = (req as any).userId;
+      const userId = requireUserId(req);
       const uploadId = parseInt(req.params.uploadId);
 
       const user = await storage.getUser(userId);
@@ -481,7 +531,7 @@ export function registerRoutes(app: Express): void {
         uploadId,
         fileName,
         filePath,
-        totalAmount: totalAmount as any,
+        totalAmount: totalAmount.toFixed(2),
         itemCount,
         clientsSummary
       });
@@ -496,15 +546,15 @@ export function registerRoutes(app: Express): void {
       await storage.updateUpload(uploadId, { status: "completed" });
 
       res.status(201).json(report);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Error generating report:", error);
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ error: getErrorMessage(error) });
     }
   });
 
   app.get("/api/report/:id/download", protectedRoute, async (req: Request, res: Response) => {
     try {
-      const userId = (req as any).userId;
+      const userId = requireUserId(req);
       const reportId = parseInt(req.params.id);
 
       const report = await storage.getReport(reportId);
@@ -528,14 +578,14 @@ export function registerRoutes(app: Express): void {
     }
   });
 
-  app.use((err: any, _req: Request, res: Response, _next: any) => {
+  app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
     if (err instanceof multer.MulterError) {
       if (err.code === "LIMIT_FILE_SIZE") {
         return res.status(400).json({ error: "Arquivo muito grande. O limite e 10MB." });
       }
       return res.status(400).json({ error: err.message });
     }
-    if (err.message === "Apenas arquivos PDF sao permitidos") {
+    if (err instanceof Error && err.message === "Apenas arquivos PDF sao permitidos") {
       return res.status(400).json({ error: err.message });
     }
     console.error("Unhandled error:", err);

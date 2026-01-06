@@ -27,7 +27,7 @@ const DATE_PATTERNS = [
   /(\d{2})-(\d{2})-(\d{2})/,
 ];
 
-const AMOUNT_PATTERN = /[+-]?\s*R?\$?\s*([\d.,]+(?:\.\d{2}|\,\d{2})?)(?:\s*[CD])?/i;
+const AMOUNT_PATTERN = /[+-]?\s*R?\$?\s*([\d.,]+(?:\.\d{2}|,\d{2})?)(?:\s*[CD])?/i;
 
 const BANK_PATTERNS: Record<string, RegExp> = {
   'Itau': /ita[uú]/i,
@@ -45,10 +45,8 @@ function parseDate(dateStr: string): Date | null {
   for (const pattern of DATE_PATTERNS) {
     const match = dateStr.match(pattern);
     if (match) {
-      let [, day, month, year] = match;
-      if (year.length === 2) {
-        year = `20${year}`;
-      }
+      const [, day, month, yearRaw] = match;
+      const year = yearRaw.length === 2 ? `20${yearRaw}` : yearRaw;
       const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
       if (!isNaN(date.getTime())) {
         return date;
@@ -62,7 +60,7 @@ function parseAmount(amountStr: string): number | null {
   const match = amountStr.match(AMOUNT_PATTERN);
   if (!match) return null;
 
-  let value = match[1]
+  const value = match[1]
     .replace(/\./g, '')
     .replace(',', '.');
 

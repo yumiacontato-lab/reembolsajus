@@ -7,7 +7,7 @@ export const requireAuthMiddleware = requireAuth();
 
 export function optionalAuth(req: Request, res: Response, next: NextFunction) {
   const auth = getAuth(req);
-  (req as any).userId = auth?.userId || null;
+  req.userId = auth?.userId || null;
   next();
 }
 
@@ -16,7 +16,7 @@ export function protectedRoute(req: Request, res: Response, next: NextFunction) 
   if (!auth?.userId) {
     return res.status(401).json({ error: "Unauthorized" });
   }
-  (req as any).userId = auth.userId;
+  req.userId = auth.userId;
   next();
 }
 

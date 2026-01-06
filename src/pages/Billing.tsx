@@ -21,10 +21,10 @@ const Billing = () => {
             if (data.url) {
                 window.location.href = data.url;
             }
-        } catch (err: any) {
+        } catch (err: unknown) {
             toast({
                 title: "Erro ao iniciar assinatura",
-                description: err.message,
+                description: err instanceof Error ? err.message : "Erro desconhecido",
                 variant: "destructive",
             });
         }
@@ -37,10 +37,10 @@ const Billing = () => {
             if (data.url) {
                 window.location.href = data.url;
             }
-        } catch (err: any) {
+        } catch (err: unknown) {
             toast({
                 title: "Erro ao abrir portal",
-                description: err.message,
+                description: err instanceof Error ? err.message : "Erro desconhecido",
                 variant: "destructive",
             });
         }
