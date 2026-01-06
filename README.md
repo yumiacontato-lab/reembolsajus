@@ -18,7 +18,7 @@ cp .env.example .env
 npm run dev
 ```
 
-O servidor sobe em `http://localhost:5001`.
+O servidor sobe em `http://localhost:5000` (ou na porta definida em `PORT`).
 
 ## Variáveis de ambiente
 
