@@ -16,7 +16,7 @@ export default defineConfig(({ mode }) => {
   return {
     server: {
       host: "0.0.0.0",
-      port: Number(process.env.PORT) || 5000,
+      port: Number(process.env.PORT) || 5001,
       allowedHosts: true,
     },
     plugins: [react(), mode === "development" && componentTagger()].filter(Boolean),
