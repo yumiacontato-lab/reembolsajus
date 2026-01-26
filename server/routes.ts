@@ -10,6 +10,7 @@ import { protectedRoute } from "./auth";
 import { processUpload } from "./services/uploadProcessor";
 import { stripe } from "./stripe";
 import { generateReportPDF } from "./services/reportGenerator";
+import { insertTransactionSchema } from "../shared/schema";
 
 const uploadsDir = path.join(process.cwd(), "uploads");
 if (!fs.existsSync(uploadsDir)) {
@@ -203,23 +204,25 @@ export function registerRoutes(app: Express): void {
           if (userId && subscriptionId) {
             const subscription = await stripe.subscriptions.retrieve(subscriptionId);
 
+            const subData = subscription as unknown as { current_period_start: number; current_period_end: number };
             await storage.createSubscription({
               userId,
               stripeSubscriptionId: subscriptionId,
               status: mapStripeSubscriptionStatus(subscription.status),
               plan: "pro", // OR determine based on price
-              currentPeriodStart: new Date(subscription.current_period_start * 1000),
-              currentPeriodEnd: new Date(subscription.current_period_end * 1000),
+              currentPeriodStart: new Date(subData.current_period_start * 1000),
+              currentPeriodEnd: new Date(subData.current_period_end * 1000),
             });
           }
           break;
         }
         case "customer.subscription.updated": {
           const subscription = event.data.object as Stripe.Subscription;
+          const subData = subscription as unknown as { current_period_start: number; current_period_end: number };
           await storage.updateSubscriptionByStripeId(subscription.id, {
             status: mapStripeSubscriptionStatus(subscription.status),
-            currentPeriodStart: new Date(subscription.current_period_start * 1000),
-            currentPeriodEnd: new Date(subscription.current_period_end * 1000),
+            currentPeriodStart: new Date(subData.current_period_start * 1000),
+            currentPeriodEnd: new Date(subData.current_period_end * 1000),
           });
           break;
         }
@@ -248,7 +251,7 @@ export function registerRoutes(app: Express): void {
         return res.status(400).json({ error: "Email is required" });
       }
 
-      const user = await storage.getUser(userId);
+      let user = await storage.getUser(userId);
 
       if (!user) {
         user = await storage.createUser({
@@ -354,7 +357,7 @@ export function registerRoutes(app: Express): void {
 
       const user = await storage.getUser(userId);
       if (!user) {
-        fs.unlinkSync(file.path);
+        await fs.promises.unlink(file.path).catch(console.error);
         return res.status(404).json({ error: "Usuario nao encontrado" });
       }
 
@@ -370,7 +373,7 @@ export function registerRoutes(app: Express): void {
       }
 
       if (!canUpload) {
-        fs.unlinkSync(file.path);
+        await fs.promises.unlink(file.path).catch(console.error);
         return res.status(403).json({
           error: "Limite de uploads atingido",
           needsSubscription: !hasActiveSubscription,
@@ -402,7 +405,7 @@ export function registerRoutes(app: Express): void {
     } catch (error) {
       console.error("Error uploading file:", error);
       if (req.file && fs.existsSync(req.file.path)) {
-        fs.unlinkSync(req.file.path);
+        await fs.promises.unlink(req.file.path).catch(console.error);
       }
       res.status(500).json({ error: "Erro ao processar upload" });
     }
@@ -462,7 +465,12 @@ export function registerRoutes(app: Express): void {
 
   app.patch("/api/transaction/:id", protectedRoute, async (req: Request, res: Response) => {
     try {
-      const updated = await storage.updateTransaction(parseInt(req.params.id), req.body);
+      const result = insertTransactionSchema.partial().safeParse(req.body);
+      if (!result.success) {
+        return res.status(400).json({ error: result.error });
+      }
+
+      const updated = await storage.updateTransaction(parseInt(req.params.id), result.data);
       if (!updated) {
         return res.status(404).json({ error: "Transaction not found" });
       }
