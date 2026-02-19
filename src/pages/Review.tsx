@@ -40,6 +40,12 @@ const tagConfig: Record<string, { icon: React.ElementType; color: string }> = {
 
 type FilterType = "all" | "reimbursable" | "possible";
 
+const parseCurrencyInput = (raw: string): number => {
+  const normalized = raw.replace(/\s/g, "").replace(/\./g, "").replace(",", ".");
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
 const getUploadSession = (): UploadSession | null => {
   if (typeof window === "undefined") {
     return null;
@@ -109,6 +115,20 @@ const Review = () => {
       prev.map(item => 
         item.id === id ? { ...item, client } : item
       )
+    );
+  };
+
+  const updateValue = (id: string, value: string) => {
+    const parsedValue = parseCurrencyInput(value);
+    setItems((prev) =>
+      prev.map((item) =>
+        item.id === id
+          ? {
+              ...item,
+              value: parsedValue,
+            }
+          : item,
+      ),
     );
   };
 
@@ -329,9 +349,14 @@ const Review = () => {
                             </Badge>
                           </td>
                           <td className="py-4 px-4 text-right">
-                            <span className="text-sm font-medium text-foreground font-mono">
-                              R$ {item.value.toFixed(2).replace('.', ',')}
-                            </span>
+                            <Input
+                              type="text"
+                              inputMode="decimal"
+                              value={item.value.toFixed(2).replace('.', ',')}
+                              onChange={(e) => updateValue(item.id, e.target.value)}
+                              className="h-8 text-sm max-w-[120px] ml-auto text-right font-mono"
+                              aria-label={`Valor do item ${item.description}`}
+                            />
                           </td>
                           <td className="py-4 px-4">
                             <Input
