@@ -9,6 +9,7 @@ import {
   buildInitialItemsFromUpload,
   type UploadSession,
 } from "@/lib/report-session";
+import { extractItemsFromPdf } from "@/lib/ocr-extractor";
 import { 
   Upload as UploadIcon, 
   FileText, 
@@ -24,6 +25,7 @@ const Upload = () => {
   const [file, setFile] = useState<File | null>(null);
   const [status, setStatus] = useState<UploadStatus>("idle");
   const [progress, setProgress] = useState(0);
+  const [processingMessage, setProcessingMessage] = useState("Processando com IA...");
   const [isDragging, setIsDragging] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -71,6 +73,7 @@ const Upload = () => {
     if (!file) return;
 
     setStatus("uploading");
+    setProcessingMessage("Processando com IA...");
     
     // Simulate upload progress
     for (let i = 0; i <= 100; i += 10) {
@@ -79,9 +82,36 @@ const Upload = () => {
     }
 
     setStatus("processing");
+    setProgress(0);
 
-    // Simulate processing
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    let extractedItems = buildInitialItemsFromUpload();
+
+    try {
+      const parsedItems = await extractItemsFromPdf(file, (message, pct) => {
+        setProcessingMessage(message);
+        setProgress(Math.max(0, Math.min(100, pct)));
+      });
+
+      if (parsedItems.length > 0) {
+        extractedItems = parsedItems;
+      } else {
+        toast({
+          title: "OCR sem lançamentos identificados",
+          description: "Incluímos um item para revisão manual. Você pode editar na tela seguinte.",
+          variant: "destructive",
+        });
+      }
+    } catch {
+      setStatus("idle");
+      setProgress(0);
+      setProcessingMessage("Processando com IA...");
+      toast({
+        title: "Falha no OCR",
+        description: "Não foi possível extrair os lançamentos do PDF. Tente outro arquivo.",
+        variant: "destructive",
+      });
+      return;
+    }
 
     setStatus("success");
     
@@ -95,7 +125,7 @@ const Upload = () => {
       uploadId,
       filename: file.name,
       uploadedAt: new Date().toISOString(),
-      items: buildInitialItemsFromUpload(),
+      items: extractedItems,
     };
 
     localStorage.setItem(UPLOAD_SESSION_STORAGE_KEY, JSON.stringify(uploadSession));
@@ -110,6 +140,7 @@ const Upload = () => {
     setFile(null);
     setStatus("idle");
     setProgress(0);
+    setProcessingMessage("Processando com IA...");
   };
 
   return (
@@ -213,7 +244,7 @@ const Upload = () => {
                     <div className="space-y-2">
                       <div className="flex items-center justify-between text-sm">
                         <span className="text-muted-foreground">
-                          {status === "uploading" ? "Enviando..." : "Processando com IA..."}
+                          {status === "uploading" ? "Enviando..." : processingMessage}
                         </span>
                         {status === "uploading" && (
                           <span className="text-foreground font-medium">{progress}%</span>
@@ -273,7 +304,7 @@ const Upload = () => {
                       disabled
                     >
                       <Loader2 className="h-5 w-5 animate-spin" />
-                      {status === "uploading" ? "Enviando..." : "Analisando com IA..."}
+                      {status === "uploading" ? "Enviando..." : "Executando OCR no extrato..."}
                     </Button>
                   )}
                 </div>
