@@ -4,6 +4,11 @@ import { Header } from "@/components/layout/Header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
+import {
+  UPLOAD_SESSION_STORAGE_KEY,
+  buildInitialItemsFromUpload,
+  type UploadSession,
+} from "@/lib/report-session";
 import { 
   Upload as UploadIcon, 
   FileText, 
@@ -85,9 +90,19 @@ const Upload = () => {
       description: "Seu extrato foi processado com sucesso.",
     });
 
+    const uploadId = crypto.randomUUID();
+    const uploadSession: UploadSession = {
+      uploadId,
+      filename: file.name,
+      uploadedAt: new Date().toISOString(),
+      items: buildInitialItemsFromUpload(),
+    };
+
+    localStorage.setItem(UPLOAD_SESSION_STORAGE_KEY, JSON.stringify(uploadSession));
+
     // Navigate to review after a short delay
     setTimeout(() => {
-      navigate("/review/1");
+      navigate(`/review/${uploadId}`);
     }, 1500);
   };
 

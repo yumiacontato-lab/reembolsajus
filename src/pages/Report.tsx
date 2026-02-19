@@ -1,7 +1,9 @@
+import { useMemo } from "react";
 import { Link } from "react-router-dom";
 import { Header } from "@/components/layout/Header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { REPORT_SESSION_STORAGE_KEY, type ReportSession } from "@/lib/report-session";
 import { 
   FileText, 
   Download,
@@ -11,25 +13,37 @@ import {
   Printer
 } from "lucide-react";
 
-// Mock report data
-const reportData = {
-  id: "1",
-  createdAt: "2024-11-20",
-  filename: "relatorio_reembolso_nov_2024.pdf",
-  source: "extrato_itau_nov_2024.pdf",
-  itemCount: 5,
-  totalValue: 577.20,
-  items: [
-    { description: "UBER *TRIP PZXY1234", value: 47.90, client: "Cliente A" },
-    { description: "1 CARTORIO NOTAS SP", value: 156.80, client: "Cliente A" },
-    { description: "GRU SIMPLES TRF3", value: 315.00, client: "Cliente B" },
-    { description: "99 *CORRIDA 892341", value: 32.50, client: "Cliente A" },
-    { description: "ESTAC SHOPPING MORUMBI", value: 25.00, client: "Cliente A" },
-  ]
+const getReportSession = (): ReportSession | null => {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  try {
+    const raw = localStorage.getItem(REPORT_SESSION_STORAGE_KEY);
+    if (!raw) {
+      return null;
+    }
+
+    const parsed = JSON.parse(raw);
+
+    if (!parsed?.id || !Array.isArray(parsed?.items)) {
+      return null;
+    }
+
+    return parsed as ReportSession;
+  } catch {
+    return null;
+  }
 };
 
 const Report = () => {
+  const reportData = useMemo(() => getReportSession(), []);
+
   const handleDownload = () => {
+    if (!reportData) {
+      return;
+    }
+
     // Simulate download - will be replaced with real PDF generation
     const element = document.createElement("a");
     element.href = "#";
@@ -38,6 +52,32 @@ const Report = () => {
     element.click();
     document.body.removeChild(element);
   };
+
+  if (!reportData) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Header />
+
+        <main className="pt-24 pb-12">
+          <div className="container mx-auto px-4 sm:px-6 max-w-3xl">
+            <Card>
+              <CardHeader>
+                <CardTitle>Nenhum relatório disponível</CardTitle>
+                <CardDescription>
+                  Gere um relatório na tela de revisão para visualizar os dados aqui.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button asChild>
+                  <Link to="/dashboard">Voltar ao Dashboard</Link>
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">

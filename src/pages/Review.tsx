@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Header } from "@/components/layout/Header";
 import { Button } from "@/components/ui/button";
@@ -7,6 +7,12 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
+import {
+  REPORT_SESSION_STORAGE_KEY,
+  UPLOAD_SESSION_STORAGE_KEY,
+  type ReportSession,
+  type UploadSession,
+} from "@/lib/report-session";
 import { 
   FileText, 
   Download,
@@ -22,73 +28,6 @@ import {
   Receipt
 } from "lucide-react";
 
-// Mock data - will be replaced with real data from backend
-const mockItems = [
-  {
-    id: "1",
-    date: "2024-11-05",
-    description: "UBER *TRIP PZXY1234",
-    value: 47.90,
-    tag: "TRANSPORTE",
-    status: "reimbursable",
-    client: ""
-  },
-  {
-    id: "2",
-    date: "2024-11-06",
-    description: "1 CARTORIO NOTAS SP",
-    value: 156.80,
-    tag: "CARTORIO",
-    status: "reimbursable",
-    client: ""
-  },
-  {
-    id: "3",
-    date: "2024-11-07",
-    description: "GRU SIMPLES TRF3",
-    value: 315.00,
-    tag: "GRU",
-    status: "reimbursable",
-    client: ""
-  },
-  {
-    id: "4",
-    date: "2024-11-10",
-    description: "99 *CORRIDA 892341",
-    value: 32.50,
-    tag: "TRANSPORTE",
-    status: "reimbursable",
-    client: ""
-  },
-  {
-    id: "5",
-    date: "2024-11-12",
-    description: "ESTAC SHOPPING MORUMBI",
-    value: 25.00,
-    tag: "ESTACIONAMENTO",
-    status: "reimbursable",
-    client: ""
-  },
-  {
-    id: "6",
-    date: "2024-11-14",
-    description: "OAB SP ANUIDADE 2024",
-    value: 890.00,
-    tag: "OAB",
-    status: "possible",
-    client: ""
-  },
-  {
-    id: "7",
-    date: "2024-11-15",
-    description: "POSTO IPIRANGA AV BRASIL",
-    value: 180.30,
-    tag: "COMBUSTIVEL",
-    status: "possible",
-    client: ""
-  },
-];
-
 const tagConfig: Record<string, { icon: React.ElementType; color: string }> = {
   TRANSPORTE: { icon: Car, color: "bg-blue-100 text-blue-800" },
   CARTORIO: { icon: Building2, color: "bg-purple-100 text-purple-800" },
@@ -96,18 +35,46 @@ const tagConfig: Record<string, { icon: React.ElementType; color: string }> = {
   ESTACIONAMENTO: { icon: ParkingCircle, color: "bg-orange-100 text-orange-800" },
   OAB: { icon: Receipt, color: "bg-red-100 text-red-800" },
   COMBUSTIVEL: { icon: Fuel, color: "bg-yellow-100 text-yellow-800" },
+  REVISAR: { icon: Edit2, color: "bg-muted text-muted-foreground" },
 };
 
 type FilterType = "all" | "reimbursable" | "possible";
+
+const getUploadSession = (): UploadSession | null => {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  try {
+    const raw = localStorage.getItem(UPLOAD_SESSION_STORAGE_KEY);
+    if (!raw) {
+      return null;
+    }
+
+    const parsed = JSON.parse(raw);
+
+    if (!parsed?.uploadId || !Array.isArray(parsed?.items)) {
+      return null;
+    }
+
+    return parsed as UploadSession;
+  } catch {
+    return null;
+  }
+};
 
 const Review = () => {
   const { uploadId } = useParams();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const uploadSession = useMemo(() => getUploadSession(), []);
+  const isCurrentUpload = uploadSession?.uploadId === uploadId;
+  const initialItems = isCurrentUpload ? uploadSession.items : [];
+  const sourceFilename = isCurrentUpload ? uploadSession.filename : "extrato_sem_referencia.pdf";
   
-  const [items, setItems] = useState(mockItems);
+  const [items, setItems] = useState(initialItems);
   const [selectedItems, setSelectedItems] = useState<string[]>(
-    mockItems.filter(i => i.status === "reimbursable").map(i => i.id)
+    initialItems.filter(i => i.status === "reimbursable").map(i => i.id)
   );
   const [filter, setFilter] = useState<FilterType>("all");
   const [isGenerating, setIsGenerating] = useState(false);
@@ -161,13 +128,34 @@ const Review = () => {
     await new Promise(resolve => setTimeout(resolve, 2000));
 
     setIsGenerating(false);
+
+    const selectedReportItems = items
+      .filter((item) => selectedItems.includes(item.id))
+      .map((item) => ({
+        description: item.description,
+        value: item.value,
+        client: item.client || "Cliente não informado",
+      }));
+
+    const reportId = crypto.randomUUID();
+    const reportSession: ReportSession = {
+      id: reportId,
+      createdAt: new Date().toISOString(),
+      filename: `relatorio_reembolso_${new Date().toISOString().slice(0, 10)}.pdf`,
+      source: sourceFilename,
+      itemCount: selectedReportItems.length,
+      totalValue: selectedReportItems.reduce((sum, item) => sum + item.value, 0),
+      items: selectedReportItems,
+    };
+
+    localStorage.setItem(REPORT_SESSION_STORAGE_KEY, JSON.stringify(reportSession));
     
     toast({
       title: "Relatório gerado!",
       description: "Seu PDF está pronto para download.",
     });
 
-    navigate("/report/1");
+    navigate(`/report/${reportId}`);
   };
 
   return (
@@ -184,7 +172,7 @@ const Review = () => {
                   <FileText className="h-5 w-5 text-primary" />
                 </div>
                 <h1 className="text-2xl font-bold text-foreground">
-                  extrato_itau_nov_2024.pdf
+                  {sourceFilename}
                 </h1>
               </div>
               <p className="text-muted-foreground">
@@ -294,6 +282,13 @@ const Review = () => {
                     </tr>
                   </thead>
                   <tbody>
+                    {filteredItems.length === 0 && (
+                      <tr>
+                        <td colSpan={6} className="py-10 text-center text-muted-foreground">
+                          Nenhuma despesa encontrada para este filtro no extrato atual.
+                        </td>
+                      </tr>
+                    )}
                     {filteredItems.map((item) => {
                       const tagInfo = tagConfig[item.tag] || { icon: Receipt, color: "bg-muted text-muted-foreground" };
                       const TagIcon = tagInfo.icon;

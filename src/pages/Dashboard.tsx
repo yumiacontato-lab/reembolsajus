@@ -1,3 +1,4 @@
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { Header } from "@/components/layout/Header";
 import { Button } from "@/components/ui/button";
@@ -11,11 +12,26 @@ import {
   AlertCircle,
   ArrowRight,
   TrendingUp,
-  DollarSign
+  DollarSign,
+  Trash2,
+  RotateCcw,
 } from "lucide-react";
 
+type UploadStatus = "completed" | "processing" | "failed";
+
+type UploadItem = {
+  id: string;
+  filename: string;
+  date: string;
+  status: UploadStatus;
+  itemsFound: number | null;
+  totalValue: number | null;
+};
+
+const DASHBOARD_UPLOADS_STORAGE_KEY = "reembolsajus:dashboard:uploads";
+
 // Mock data - will be replaced with real data from backend
-const mockUploads = [
+const defaultUploads: UploadItem[] = [
   {
     id: "1",
     filename: "extrato_itau_nov_2024.pdf",
@@ -34,7 +50,7 @@ const mockUploads = [
   },
 ];
 
-const statusConfig = {
+const statusConfig: Record<UploadStatus, { label: string; icon: typeof CheckCircle2; className: string }> = {
   completed: {
     label: "Concluído",
     icon: CheckCircle2,
@@ -52,9 +68,71 @@ const statusConfig = {
   }
 };
 
+const getInitialUploads = (): UploadItem[] => {
+  if (typeof window === "undefined") {
+    return defaultUploads;
+  }
+
+  try {
+    const savedUploads = localStorage.getItem(DASHBOARD_UPLOADS_STORAGE_KEY);
+
+    if (!savedUploads) {
+      return defaultUploads;
+    }
+
+    const parsedUploads = JSON.parse(savedUploads);
+
+    if (!Array.isArray(parsedUploads)) {
+      return defaultUploads;
+    }
+
+    return parsedUploads;
+  } catch {
+    return defaultUploads;
+  }
+};
+
 const Dashboard = () => {
-  const uploadsUsed = 2;
+  const [uploads, setUploads] = useState<UploadItem[]>(getInitialUploads);
+  const uploadsUsed = uploads.length;
   const uploadsLimit = 3;
+
+  const completedUploads = useMemo(
+    () => uploads.filter((upload) => upload.status === "completed"),
+    [uploads],
+  );
+
+  const totalRecovered = useMemo(
+    () => completedUploads.reduce((acc, upload) => acc + (upload.totalValue ?? 0), 0),
+    [completedUploads],
+  );
+
+  const totalItemsFound = useMemo(
+    () => completedUploads.reduce((acc, upload) => acc + (upload.itemsFound ?? 0), 0),
+    [completedUploads],
+  );
+
+  useEffect(() => {
+    localStorage.setItem(DASHBOARD_UPLOADS_STORAGE_KEY, JSON.stringify(uploads));
+  }, [uploads]);
+
+  const handleDeleteUpload = (uploadId: string) => {
+    setUploads((currentUploads) => currentUploads.filter((upload) => upload.id !== uploadId));
+  };
+
+  const handleResetUploads = () => {
+    const shouldReset = window.confirm("Deseja realmente zerar todos os extratos do Dashboard?");
+
+    if (!shouldReset) {
+      return;
+    }
+
+    setUploads([]);
+  };
+
+  const handleRestoreExampleData = () => {
+    setUploads(defaultUploads);
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -113,10 +191,9 @@ const Dashboard = () => {
               </CardHeader>
               <CardContent>
                 <div className="flex items-end justify-between">
-                  <div>
-                    <span className="text-4xl font-bold text-foreground">R$ 1.847</span>
-                    <span className="text-lg text-muted-foreground">,50</span>
-                  </div>
+                  <p className="text-4xl font-bold text-foreground">
+                    R$ {totalRecovered.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </p>
                   <div className="text-right">
                     <DollarSign className="h-8 w-8 text-accent" />
                   </div>
@@ -135,16 +212,16 @@ const Dashboard = () => {
               </CardHeader>
               <CardContent>
                 <div className="flex items-end justify-between">
-                  <div>
-                    <span className="text-4xl font-bold text-foreground">12</span>
+                  <p className="text-4xl font-bold text-foreground">
+                    {totalItemsFound}
                     <span className="text-lg text-muted-foreground"> itens</span>
-                  </div>
+                  </p>
                   <div className="text-right">
                     <CheckCircle2 className="h-8 w-8 text-accent" />
                   </div>
                 </div>
                 <p className="text-sm text-muted-foreground mt-2">
-                  Em 2 extratos processados
+                  Em {completedUploads.length} extratos processados
                 </p>
               </CardContent>
             </Card>
@@ -160,35 +237,47 @@ const Dashboard = () => {
                     Seus últimos extratos processados
                   </CardDescription>
                 </div>
-                <Button variant="ghost" size="sm" asChild>
-                  <Link to="/historico">
-                    Ver todos
-                    <ArrowRight className="h-4 w-4" />
-                  </Link>
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" size="sm" onClick={handleResetUploads}>
+                    <RotateCcw className="h-4 w-4" />
+                    Zerar extratos
+                  </Button>
+                  <Button variant="ghost" size="sm" asChild>
+                    <Link to="/historico">
+                      Ver todos
+                      <ArrowRight className="h-4 w-4" />
+                    </Link>
+                  </Button>
+                </div>
               </div>
             </CardHeader>
             <CardContent>
-              {mockUploads.length === 0 ? (
+              {uploads.length === 0 ? (
                 <div className="text-center py-12">
                   <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
                   <h3 className="text-lg font-medium text-foreground mb-2">
                     Nenhum upload ainda
                   </h3>
                   <p className="text-muted-foreground mb-4">
-                    Faça seu primeiro upload para começar a recuperar custas.
+                    Você zerou os extratos para teste. Faça um novo upload ou restaure os dados de exemplo.
                   </p>
-                  <Button variant="accent" asChild>
-                    <Link to="/upload">
-                      <Upload className="h-5 w-5" />
-                      Fazer Upload
-                    </Link>
-                  </Button>
+                  <div className="flex items-center justify-center gap-2">
+                    <Button variant="outline" onClick={handleRestoreExampleData}>
+                      <RotateCcw className="h-5 w-5" />
+                      Restaurar exemplo
+                    </Button>
+                    <Button variant="accent" asChild>
+                      <Link to="/upload">
+                        <Upload className="h-5 w-5" />
+                        Fazer Upload
+                      </Link>
+                    </Button>
+                  </div>
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {mockUploads.map((upload) => {
-                    const status = statusConfig[upload.status as keyof typeof statusConfig];
+                  {uploads.map((upload) => {
+                    const status = statusConfig[upload.status];
                     const StatusIcon = status.icon;
 
                     return (
@@ -234,6 +323,16 @@ const Dashboard = () => {
                               </Link>
                             </Button>
                           )}
+
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleDeleteUpload(upload.id)}
+                            aria-label={`Excluir ${upload.filename}`}
+                            title="Excluir extrato"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
                         </div>
                       </div>
                     );
