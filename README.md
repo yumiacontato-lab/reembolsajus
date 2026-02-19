@@ -60,6 +60,23 @@ This project is built with:
 - shadcn-ui
 - Tailwind CSS
 
+## Neon Database (MCP)
+
+Este projeto já está preparado para inicializar o schema no Neon.
+
+1. Preencha `DATABASE_URL` no arquivo `.env`.
+2. Execute a validação de ambiente:
+	- `npm run db:test`
+3. Inicialize o banco com o schema inicial:
+	- `npm run db:init`
+
+O schema SQL base está em `db/schema.sql` e contempla:
+- `users`
+- `uploads`
+- `transactions`
+- `reports`
+- `report_items`
+
 ## How can I deploy this project?
 
 Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
