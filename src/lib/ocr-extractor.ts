@@ -4,9 +4,10 @@ import type { ReviewItem, ReviewItemStatus } from "@/lib/report-session";
 
 type ProgressCallback = (message: string, progress: number) => void;
 
-const DATE_REGEX = /(\d{2}[\/.-]\d{2}[\/.-]\d{2,4})/;
-const BRL_VALUE_REGEX = /(\d{1,3}(?:\.\d{3})*,\d{2})\s*$/;
-const GENERIC_VALUE_REGEX = /(\d+(?:[.,]\d{2}))\s*$/;
+const FULL_DATE_REGEX = /(\d{2}[\/.-]\d{2}[\/.-]\d{2,4})/;
+const SHORT_DATE_REGEX = /(\d{2}[\/.-]\d{2})(?![\/.-]\d)/;
+const VALUE_REGEX_GLOBAL = /(?:R\$\s*)?-?\d{1,3}(?:[.\s]\d{3})*,\d{2}|(?:R\$\s*)?-?\d+[.,]\d{2}/g;
+const HEADER_MARKERS = ["DATA", "DESCR", "HISTOR", "SALDO", "LANCAMENTO", "LANÇAMENTO"];
 
 const reimbursableKeywords = [
   "UBER",
@@ -40,10 +41,24 @@ const normalizeDate = (rawDate: string): string => {
   return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
 };
 
+const normalizeDateWithFallbackYear = (rawDate: string): string => {
+  const normalized = rawDate.replace(/[.-]/g, "/");
+  const parts = normalized.split("/");
+
+  if (parts.length === 2) {
+    const [day, month] = parts;
+    const year = String(new Date().getFullYear());
+    return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+  }
+
+  return normalizeDate(rawDate);
+};
+
 const parseCurrencyValue = (rawValue: string): number => {
-  const normalized = rawValue.includes(",")
-    ? rawValue.replace(/\./g, "").replace(",", ".")
-    : rawValue;
+  const cleaned = rawValue.replace("R$", "").replace(/\s/g, "").trim();
+  const normalized = cleaned.includes(",")
+    ? cleaned.replace(/\./g, "").replace(",", ".")
+    : cleaned;
 
   const value = Number(normalized);
   return Number.isFinite(value) ? value : 0;
@@ -83,27 +98,56 @@ const classifyTag = (description: string): { tag: string; status: ReviewItemStat
   };
 };
 
+const isLikelyHeaderLine = (line: string): boolean => {
+  const upper = line.toUpperCase();
+  return HEADER_MARKERS.some((marker) => upper.includes(marker));
+};
+
+const extractDateFromLine = (line: string): { rawDate: string; normalizedDate: string } | null => {
+  const fullDateMatch = line.match(FULL_DATE_REGEX);
+  if (fullDateMatch) {
+    return {
+      rawDate: fullDateMatch[1],
+      normalizedDate: normalizeDateWithFallbackYear(fullDateMatch[1]),
+    };
+  }
+
+  const shortDateMatch = line.match(SHORT_DATE_REGEX);
+  if (shortDateMatch) {
+    return {
+      rawDate: shortDateMatch[1],
+      normalizedDate: normalizeDateWithFallbackYear(shortDateMatch[1]),
+    };
+  }
+
+  return null;
+};
+
+const extractValueCandidates = (line: string): string[] => {
+  return Array.from(line.matchAll(VALUE_REGEX_GLOBAL)).map((match) => match[0]);
+};
+
 const parseLineToItem = (line: string): ReviewItem | null => {
   const compactLine = line.replace(/\s+/g, " ").trim();
-  if (!compactLine || compactLine.length < 8) {
+  if (!compactLine || compactLine.length < 6 || isLikelyHeaderLine(compactLine)) {
     return null;
   }
 
-  const dateMatch = compactLine.match(DATE_REGEX);
-  if (!dateMatch) {
+  const dateData = extractDateFromLine(compactLine);
+  if (!dateData) {
     return null;
   }
 
-  const valueMatch = compactLine.match(BRL_VALUE_REGEX) ?? compactLine.match(GENERIC_VALUE_REGEX);
-  if (!valueMatch) {
+  const valueCandidates = extractValueCandidates(compactLine);
+  if (valueCandidates.length === 0) {
     return null;
   }
 
-  const dateRaw = dateMatch[1];
-  const valueRaw = valueMatch[1];
+  const dateRaw = dateData.rawDate;
+  const valueRaw = valueCandidates[0];
 
   const dateIndex = compactLine.indexOf(dateRaw);
-  const valueIndex = compactLine.lastIndexOf(valueRaw);
+  const valueIndex = compactLine.indexOf(valueRaw, dateIndex + dateRaw.length);
 
   if (valueIndex <= dateIndex) {
     return null;
@@ -124,13 +168,40 @@ const parseLineToItem = (line: string): ReviewItem | null => {
 
   return {
     id: crypto.randomUUID(),
-    date: normalizeDate(dateRaw),
+    date: dateData.normalizedDate,
     description,
     value,
     tag,
     status,
     client: "",
   };
+};
+
+const parseItemsFromLineCombinations = (text: string): ReviewItem[] => {
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  const parsed: ReviewItem[] = [];
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    const nextLine = lines[index + 1] ?? "";
+
+    const direct = parseLineToItem(line);
+    if (direct) {
+      parsed.push(direct);
+      continue;
+    }
+
+    const combined = parseLineToItem(`${line} ${nextLine}`);
+    if (combined) {
+      parsed.push(combined);
+    }
+  }
+
+  return parsed;
 };
 
 const deduplicateItems = (items: ReviewItem[]): ReviewItem[] => {
@@ -242,20 +313,14 @@ export const extractItemsFromPdf = async (
   const textFromPdf = await extractTextWithPdfJs(file, onProgress);
   let candidateText = textFromPdf;
 
-  const preliminaryItems = candidateText
-    .split(/\r?\n/)
-    .map((line) => parseLineToItem(line))
-    .filter((item): item is ReviewItem => Boolean(item));
+  const preliminaryItems = parseItemsFromLineCombinations(candidateText);
 
   if (preliminaryItems.length === 0) {
     const textFromOcr = await extractTextWithOcr(file, onProgress);
     candidateText = `${candidateText}\n${textFromOcr}`;
   }
 
-  const parsedItems = candidateText
-    .split(/\r?\n/)
-    .map((line) => parseLineToItem(line))
-    .filter((item): item is ReviewItem => Boolean(item));
+  const parsedItems = parseItemsFromLineCombinations(candidateText);
 
   onProgress?.("Finalizando análise...", 100);
 
