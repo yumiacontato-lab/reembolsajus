@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 
 type UploadStatus = "idle" | "uploading" | "processing" | "success" | "error";
+const OCR_DEBUG_STORAGE_KEY = "reembolsajus:ocr:last-debug";
 
 const Upload = () => {
   const [file, setFile] = useState<File | null>(null);
@@ -87,17 +88,30 @@ const Upload = () => {
     let extractedItems = buildInitialItemsFromUpload();
 
     try {
-      const parsedItems = await extractItemsFromPdf(file, (message, pct) => {
-        setProcessingMessage(message);
-        setProgress(Math.max(0, Math.min(100, pct)));
-      });
+      const parsedItems = await extractItemsFromPdf(
+        file,
+        (message, pct) => {
+          setProcessingMessage(message);
+          setProgress(Math.max(0, Math.min(100, pct)));
+        },
+        (debugPayload) => {
+          localStorage.setItem(
+            OCR_DEBUG_STORAGE_KEY,
+            JSON.stringify({
+              filename: file.name,
+              createdAt: new Date().toISOString(),
+              ...debugPayload,
+            }),
+          );
+        },
+      );
 
       if (parsedItems.length > 0) {
         extractedItems = parsedItems;
       } else {
         toast({
           title: "OCR sem lançamentos identificados",
-          description: "Incluímos um item para revisão manual. Você pode editar na tela seguinte.",
+          description: "Incluímos um item para revisão manual. Se quiser, te mostro o debug do OCR para calibrar o parser.",
           variant: "destructive",
         });
       }

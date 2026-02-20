@@ -3,10 +3,16 @@ import { createWorker } from "tesseract.js";
 import type { ReviewItem, ReviewItemStatus } from "@/lib/report-session";
 
 type ProgressCallback = (message: string, progress: number) => void;
+type DebugCallback = (payload: {
+  textFromPdf: string;
+  textFromOcr?: string;
+  parsedCount: number;
+  sample: string[];
+}) => void;
 
 const FULL_DATE_REGEX = /(\d{2}[\/.-]\d{2}[\/.-]\d{2,4})/;
 const SHORT_DATE_REGEX = /(\d{2}[\/.-]\d{2})(?![\/.-]\d)/;
-const VALUE_REGEX_GLOBAL = /(?:R\$\s*)?-?\d{1,3}(?:[.\s]\d{3})*,\d{2}|(?:R\$\s*)?-?\d+[.,]\d{2}/g;
+const VALUE_REGEX_GLOBAL = /(?:R\$\s*)?-?\d{1,3}(?:[.\s]\d{3})*,\d{1,2}|(?:R\$\s*)?-?\d+[.,]\d{1,2}/g;
 const HEADER_MARKERS = ["DATA", "DESCR", "HISTOR", "SALDO", "LANCAMENTO", "LANÇAMENTO"];
 
 const reimbursableKeywords = [
@@ -55,10 +61,29 @@ const normalizeDateWithFallbackYear = (rawDate: string): string => {
 };
 
 const parseCurrencyValue = (rawValue: string): number => {
-  const cleaned = rawValue.replace("R$", "").replace(/\s/g, "").trim();
-  const normalized = cleaned.includes(",")
-    ? cleaned.replace(/\./g, "").replace(",", ".")
-    : cleaned;
+  const cleaned = rawValue
+    .normalize("NFKC")
+    .replace(/[Rr]\s*\$/g, "")
+    .replace(/\s/g, "")
+    .replace(/[^0-9,.-]/g, "")
+    .trim();
+
+  if (!cleaned) {
+    return 0;
+  }
+
+  const lastComma = cleaned.lastIndexOf(",");
+  const lastDot = cleaned.lastIndexOf(".");
+
+  let normalized = cleaned;
+
+  if (lastComma > lastDot) {
+    normalized = cleaned.replace(/\./g, "").replace(",", ".");
+  } else if (lastDot > lastComma) {
+    normalized = cleaned.replace(/,/g, "");
+  }
+
+  normalized = normalized.replace(/(?!^)-/g, "");
 
   const value = Number(normalized);
   return Number.isFinite(value) ? value : 0;
@@ -186,6 +211,7 @@ const parseItemsFromLineCombinations = (text: string): ReviewItem[] => {
   const parsed: ReviewItem[] = [];
 
   for (let index = 0; index < lines.length; index += 1) {
+    const previousLine = lines[index - 1] ?? "";
     const line = lines[index];
     const nextLine = lines[index + 1] ?? "";
 
@@ -198,6 +224,12 @@ const parseItemsFromLineCombinations = (text: string): ReviewItem[] => {
     const combined = parseLineToItem(`${line} ${nextLine}`);
     if (combined) {
       parsed.push(combined);
+      continue;
+    }
+
+    const combinedWithPrevious = parseLineToItem(`${previousLine} ${line}`);
+    if (combinedWithPrevious) {
+      parsed.push(combinedWithPrevious);
     }
   }
 
@@ -292,7 +324,7 @@ const extractTextWithOcr = async (file: File, onProgress?: ProgressCallback): Pr
       canvas.width = viewport.width;
       canvas.height = viewport.height;
 
-      await page.render({ canvasContext: context, viewport }).promise;
+      await page.render({ canvasContext: context, viewport, canvas }).promise;
       const { data: ocrData } = await worker.recognize(canvas);
       chunks.push(ocrData.text);
 
@@ -309,20 +341,29 @@ const extractTextWithOcr = async (file: File, onProgress?: ProgressCallback): Pr
 export const extractItemsFromPdf = async (
   file: File,
   onProgress?: ProgressCallback,
+  onDebug?: DebugCallback,
 ): Promise<ReviewItem[]> => {
   const textFromPdf = await extractTextWithPdfJs(file, onProgress);
   let candidateText = textFromPdf;
+  let textFromOcr: string | undefined;
 
   const preliminaryItems = parseItemsFromLineCombinations(candidateText);
 
   if (preliminaryItems.length === 0) {
-    const textFromOcr = await extractTextWithOcr(file, onProgress);
+    textFromOcr = await extractTextWithOcr(file, onProgress);
     candidateText = `${candidateText}\n${textFromOcr}`;
   }
 
   const parsedItems = parseItemsFromLineCombinations(candidateText);
 
   onProgress?.("Finalizando análise...", 100);
+
+  onDebug?.({
+    textFromPdf,
+    textFromOcr,
+    parsedCount: parsedItems.length,
+    sample: candidateText.split(/\r?\n/).filter(Boolean).slice(0, 30),
+  });
 
   return deduplicateItems(parsedItems);
 };
