@@ -1,0 +1,738 @@
+{
+  "version": "1.0.0",
+  "generated": "2026-02-21T09:27:07.123Z",
+  "stack": {
+    "primaryLanguage": "typescript",
+    "languages": [
+      "javascript",
+      "typescript"
+    ],
+    "frameworks": [],
+    "buildTools": [
+      "vite"
+    ],
+    "testFrameworks": [],
+    "packageManager": "bun",
+    "isMonorepo": false,
+    "hasDocker": false,
+    "hasCI": false
+  },
+  "structure": {
+    "totalFiles": 96,
+    "rootPath": ".",
+    "topDirectories": [
+      {
+        "name": "db",
+        "fileCount": 1,
+        "description": "Module directory"
+      },
+      {
+        "name": "public",
+        "fileCount": 3,
+        "description": "Public static assets"
+      },
+      {
+        "name": "scripts",
+        "fileCount": 1,
+        "description": "Build and utility scripts"
+      },
+      {
+        "name": "src",
+        "fileCount": 77,
+        "description": "Source code root"
+      }
+    ],
+    "languageDistribution": [
+      {
+        "extension": ".tsx",
+        "count": 69
+      },
+      {
+        "extension": ".ts",
+        "count": 8
+      },
+      {
+        "extension": ".json",
+        "count": 6
+      },
+      {
+        "extension": ".js",
+        "count": 2
+      },
+      {
+        "extension": ".md",
+        "count": 2
+      },
+      {
+        "extension": ".css",
+        "count": 2
+      },
+      {
+        "extension": ".html",
+        "count": 1
+      },
+      {
+        "extension": ".lockb",
+        "count": 1
+      },
+      {
+        "extension": ".mjs",
+        "count": 1
+      },
+      {
+        "extension": ".txt",
+        "count": 1
+      }
+    ]
+  },
+  "architecture": {
+    "layers": [
+      {
+        "name": "Utils",
+        "description": "Shared utilities and helpers",
+        "directories": [
+          "src/lib"
+        ],
+        "symbolCount": 8,
+        "dependsOn": []
+      },
+      {
+        "name": "Components",
+        "description": "UI components and views",
+        "directories": [
+          "src/components/ui",
+          "src/pages",
+          "src/components",
+          "src/components/layout",
+          "src/components/landing"
+        ],
+        "symbolCount": 32,
+        "dependsOn": []
+      }
+    ],
+    "patterns": [],
+    "entryPoints": [
+      "src/main.tsx"
+    ],
+    "mainEntryPoints": [
+      "src/main.tsx"
+    ],
+    "moduleExports": []
+  },
+  "symbols": {
+    "classes": [],
+    "interfaces": [
+      {
+        "name": "BadgeProps",
+        "kind": "interface",
+        "file": "src/components/ui/badge.tsx",
+        "line": 23,
+        "exported": true
+      },
+      {
+        "name": "ButtonProps",
+        "kind": "interface",
+        "file": "src/components/ui/button.tsx",
+        "line": 37,
+        "exported": true
+      },
+      {
+        "name": "TextareaProps",
+        "kind": "interface",
+        "file": "src/components/ui/textarea.tsx",
+        "line": 5,
+        "exported": true
+      },
+      {
+        "name": "NavLinkCompatProps",
+        "kind": "interface",
+        "file": "src/components/NavLink.tsx",
+        "line": 5,
+        "exported": false
+      },
+      {
+        "name": "State",
+        "kind": "interface",
+        "file": "src/hooks/use-toast.ts",
+        "line": 49,
+        "exported": false
+      }
+    ],
+    "functions": [
+      {
+        "name": "Benefits",
+        "kind": "function",
+        "file": "src/components/landing/Benefits.tsx",
+        "line": 36,
+        "exported": true
+      },
+      {
+        "name": "cn",
+        "kind": "function",
+        "file": "src/lib/utils.ts",
+        "line": 4,
+        "exported": true
+      },
+      {
+        "name": "Footer",
+        "kind": "function",
+        "file": "src/components/landing/Footer.tsx",
+        "line": 4,
+        "exported": true
+      },
+      {
+        "name": "Pricing",
+        "kind": "function",
+        "file": "src/components/landing/Pricing.tsx",
+        "line": 14,
+        "exported": true
+      },
+      {
+        "name": "Toaster",
+        "kind": "function",
+        "file": "src/components/ui/toaster.tsx",
+        "line": 4,
+        "exported": true
+      },
+      {
+        "name": "useIsMobile",
+        "kind": "function",
+        "file": "src/hooks/use-mobile.tsx",
+        "line": 5,
+        "exported": true
+      },
+      {
+        "name": "Badge",
+        "kind": "function",
+        "file": "src/components/ui/badge.tsx",
+        "line": 25,
+        "exported": false
+      },
+      {
+        "name": "dispatch",
+        "kind": "function",
+        "file": "src/hooks/use-toast.ts",
+        "line": 128,
+        "exported": false
+      },
+      {
+        "name": "genId",
+        "kind": "function",
+        "file": "src/hooks/use-toast.ts",
+        "line": 24,
+        "exported": false
+      },
+      {
+        "name": "Skeleton",
+        "kind": "function",
+        "file": "src/components/ui/skeleton.tsx",
+        "line": 3,
+        "exported": false
+      },
+      {
+        "name": "toast",
+        "kind": "function",
+        "file": "src/hooks/use-toast.ts",
+        "line": 137,
+        "exported": false
+      },
+      {
+        "name": "useCarousel",
+        "kind": "function",
+        "file": "src/components/ui/carousel.tsx",
+        "line": 31,
+        "exported": false
+      },
+      {
+        "name": "useChart",
+        "kind": "function",
+        "file": "src/components/ui/chart.tsx",
+        "line": 22,
+        "exported": false
+      },
+      {
+        "name": "useSidebar",
+        "kind": "function",
+        "file": "src/components/ui/sidebar.tsx",
+        "line": 34,
+        "exported": false
+      },
+      {
+        "name": "useToast",
+        "kind": "function",
+        "file": "src/hooks/use-toast.ts",
+        "line": 166,
+        "exported": false
+      }
+    ],
+    "types": [
+      {
+        "name": "CalendarProps",
+        "kind": "type",
+        "file": "src/components/ui/calendar.tsx",
+        "line": 8,
+        "exported": true
+      },
+      {
+        "name": "ChartConfig",
+        "kind": "type",
+        "file": "src/components/ui/chart.tsx",
+        "line": 9,
+        "exported": true
+      },
+      {
+        "name": "ReportItem",
+        "kind": "type",
+        "file": "src/lib/report-session.ts",
+        "line": 20,
+        "exported": true
+      },
+      {
+        "name": "ReportSession",
+        "kind": "type",
+        "file": "src/lib/report-session.ts",
+        "line": 26,
+        "exported": true
+      },
+      {
+        "name": "ReviewItem",
+        "kind": "type",
+        "file": "src/lib/report-session.ts",
+        "line": 3,
+        "exported": true
+      },
+      {
+        "name": "ReviewItemStatus",
+        "kind": "type",
+        "file": "src/lib/report-session.ts",
+        "line": 1,
+        "exported": true
+      },
+      {
+        "name": "UploadSession",
+        "kind": "type",
+        "file": "src/lib/report-session.ts",
+        "line": 13,
+        "exported": true
+      },
+      {
+        "name": "Action",
+        "kind": "type",
+        "file": "src/hooks/use-toast.ts",
+        "line": 31,
+        "exported": false
+      },
+      {
+        "name": "ActionType",
+        "kind": "type",
+        "file": "src/hooks/use-toast.ts",
+        "line": 29,
+        "exported": false
+      },
+      {
+        "name": "CarouselApi",
+        "kind": "type",
+        "file": "src/components/ui/carousel.tsx",
+        "line": 8,
+        "exported": false
+      },
+      {
+        "name": "CarouselContextProps",
+        "kind": "type",
+        "file": "src/components/ui/carousel.tsx",
+        "line": 20,
+        "exported": false
+      },
+      {
+        "name": "CarouselOptions",
+        "kind": "type",
+        "file": "src/components/ui/carousel.tsx",
+        "line": 10,
+        "exported": false
+      },
+      {
+        "name": "CarouselPlugin",
+        "kind": "type",
+        "file": "src/components/ui/carousel.tsx",
+        "line": 11,
+        "exported": false
+      },
+      {
+        "name": "CarouselProps",
+        "kind": "type",
+        "file": "src/components/ui/carousel.tsx",
+        "line": 13,
+        "exported": false
+      },
+      {
+        "name": "ChartContextProps",
+        "kind": "type",
+        "file": "src/components/ui/chart.tsx",
+        "line": 16,
+        "exported": false
+      },
+      {
+        "name": "DebugCallback",
+        "kind": "type",
+        "file": "src/lib/ocr-extractor.ts",
+        "line": 6,
+        "exported": false
+      },
+      {
+        "name": "FilterType",
+        "kind": "type",
+        "file": "src/pages/Review.tsx",
+        "line": 41,
+        "exported": false
+      },
+      {
+        "name": "FormFieldContextValue",
+        "kind": "type",
+        "file": "src/components/ui/form.tsx",
+        "line": 11,
+        "exported": false
+      },
+      {
+        "name": "FormItemContextValue",
+        "kind": "type",
+        "file": "src/components/ui/form.tsx",
+        "line": 56,
+        "exported": false
+      },
+      {
+        "name": "PaginationLinkProps",
+        "kind": "type",
+        "file": "src/components/ui/pagination.tsx",
+        "line": 29,
+        "exported": false
+      },
+      {
+        "name": "ProgressCallback",
+        "kind": "type",
+        "file": "src/lib/ocr-extractor.ts",
+        "line": 5,
+        "exported": false
+      },
+      {
+        "name": "SidebarContext",
+        "kind": "type",
+        "file": "src/components/ui/sidebar.tsx",
+        "line": 22,
+        "exported": false
+      },
+      {
+        "name": "Toast",
+        "kind": "type",
+        "file": "src/hooks/use-toast.ts",
+        "line": 135,
+        "exported": false
+      },
+      {
+        "name": "ToasterProps",
+        "kind": "type",
+        "file": "src/components/ui/sonner.tsx",
+        "line": 4,
+        "exported": false
+      },
+      {
+        "name": "ToasterToast",
+        "kind": "type",
+        "file": "src/hooks/use-toast.ts",
+        "line": 8,
+        "exported": false
+      },
+      {
+        "name": "UploadItem",
+        "kind": "type",
+        "file": "src/pages/History.tsx",
+        "line": 8,
+        "exported": false
+      },
+      {
+        "name": "UploadItem",
+        "kind": "type",
+        "file": "src/pages/Dashboard.tsx",
+        "line": 22,
+        "exported": false
+      },
+      {
+        "name": "UploadStatus",
+        "kind": "type",
+        "file": "src/pages/Upload.tsx",
+        "line": 22,
+        "exported": false
+      },
+      {
+        "name": "UploadStatus",
+        "kind": "type",
+        "file": "src/pages/Dashboard.tsx",
+        "line": 20,
+        "exported": false
+      },
+      {
+        "name": "UseCarouselParameters",
+        "kind": "type",
+        "file": "src/components/ui/carousel.tsx",
+        "line": 9,
+        "exported": false
+      }
+    ],
+    "enums": []
+  },
+  "publicAPI": [
+    {
+      "name": "BadgeProps",
+      "kind": "interface",
+      "file": "src/components/ui/badge.tsx",
+      "line": 23,
+      "exported": true
+    },
+    {
+      "name": "Benefits",
+      "kind": "function",
+      "file": "src/components/landing/Benefits.tsx",
+      "line": 36,
+      "exported": true
+    },
+    {
+      "name": "ButtonProps",
+      "kind": "interface",
+      "file": "src/components/ui/button.tsx",
+      "line": 37,
+      "exported": true
+    },
+    {
+      "name": "CalendarProps",
+      "kind": "type",
+      "file": "src/components/ui/calendar.tsx",
+      "line": 8,
+      "exported": true
+    },
+    {
+      "name": "ChartConfig",
+      "kind": "type",
+      "file": "src/components/ui/chart.tsx",
+      "line": 9,
+      "exported": true
+    },
+    {
+      "name": "cn",
+      "kind": "function",
+      "file": "src/lib/utils.ts",
+      "line": 4,
+      "exported": true
+    },
+    {
+      "name": "Footer",
+      "kind": "function",
+      "file": "src/components/landing/Footer.tsx",
+      "line": 4,
+      "exported": true
+    },
+    {
+      "name": "Pricing",
+      "kind": "function",
+      "file": "src/components/landing/Pricing.tsx",
+      "line": 14,
+      "exported": true
+    },
+    {
+      "name": "ReportItem",
+      "kind": "type",
+      "file": "src/lib/report-session.ts",
+      "line": 20,
+      "exported": true
+    },
+    {
+      "name": "ReportSession",
+      "kind": "type",
+      "file": "src/lib/report-session.ts",
+      "line": 26,
+      "exported": true
+    },
+    {
+      "name": "ReviewItem",
+      "kind": "type",
+      "file": "src/lib/report-session.ts",
+      "line": 3,
+      "exported": true
+    },
+    {
+      "name": "ReviewItemStatus",
+      "kind": "type",
+      "file": "src/lib/report-session.ts",
+      "line": 1,
+      "exported": true
+    },
+    {
+      "name": "TextareaProps",
+      "kind": "interface",
+      "file": "src/components/ui/textarea.tsx",
+      "line": 5,
+      "exported": true
+    },
+    {
+      "name": "Toaster",
+      "kind": "function",
+      "file": "src/components/ui/toaster.tsx",
+      "line": 4,
+      "exported": true
+    },
+    {
+      "name": "UploadSession",
+      "kind": "type",
+      "file": "src/lib/report-session.ts",
+      "line": 13,
+      "exported": true
+    },
+    {
+      "name": "useIsMobile",
+      "kind": "function",
+      "file": "src/hooks/use-mobile.tsx",
+      "line": 5,
+      "exported": true
+    }
+  ],
+  "dependencies": {
+    "mostImported": [
+      {
+        "file": "src/App.tsx",
+        "importedBy": 1,
+        "description": "Source code root"
+      },
+      {
+        "file": "src/index.css",
+        "importedBy": 1,
+        "description": "src module exports"
+      },
+      {
+        "file": "src/pages/Index.tsx",
+        "importedBy": 1,
+        "description": "Page components (Next.js/Nuxt)"
+      },
+      {
+        "file": "src/pages/Login.tsx",
+        "importedBy": 1,
+        "description": "Page components (Next.js/Nuxt)"
+      },
+      {
+        "file": "src/pages/Signup.tsx",
+        "importedBy": 1,
+        "description": "Page components (Next.js/Nuxt)"
+      },
+      {
+        "file": "src/pages/Dashboard.tsx",
+        "importedBy": 1,
+        "description": "Page components (Next.js/Nuxt)"
+      },
+      {
+        "file": "src/pages/Upload.tsx",
+        "importedBy": 1,
+        "description": "Page components (Next.js/Nuxt)"
+      },
+      {
+        "file": "src/pages/Review.tsx",
+        "importedBy": 1,
+        "description": "Page components (Next.js/Nuxt)"
+      },
+      {
+        "file": "src/pages/Report.tsx",
+        "importedBy": 1,
+        "description": "Page components (Next.js/Nuxt)"
+      },
+      {
+        "file": "src/pages/History.tsx",
+        "importedBy": 1,
+        "description": "Page components (Next.js/Nuxt)"
+      },
+      {
+        "file": "src/pages/Terms.tsx",
+        "importedBy": 1,
+        "description": "Page components (Next.js/Nuxt)"
+      },
+      {
+        "file": "src/pages/Privacy.tsx",
+        "importedBy": 1,
+        "description": "Page components (Next.js/Nuxt)"
+      },
+      {
+        "file": "src/pages/NotFound.tsx",
+        "importedBy": 1,
+        "description": "Page components (Next.js/Nuxt)"
+      }
+    ]
+  },
+  "stats": {
+    "totalSymbols": 50,
+    "exportedSymbols": 16,
+    "analysisTimeMs": 728
+  },
+  "keyFiles": [
+    {
+      "path": "src/main.tsx",
+      "description": "Source code root",
+      "category": "entrypoint"
+    },
+    {
+      "path": "eslint.config.js",
+      "description": "Tool configuration",
+      "category": "config"
+    },
+    {
+      "path": "package.json",
+      "description": "Package manifest",
+      "category": "config"
+    },
+    {
+      "path": "postcss.config.js",
+      "description": "Tool configuration",
+      "category": "config"
+    },
+    {
+      "path": "tailwind.config.ts",
+      "description": "Tool configuration",
+      "category": "config"
+    },
+    {
+      "path": "tsconfig.app.json",
+      "description": "TypeScript configuration",
+      "category": "config"
+    },
+    {
+      "path": "tsconfig.json",
+      "description": "TypeScript configuration",
+      "category": "config"
+    },
+    {
+      "path": "tsconfig.node.json",
+      "description": "TypeScript configuration",
+      "category": "config"
+    },
+    {
+      "path": "vite.config.ts",
+      "description": "Tool configuration",
+      "category": "config"
+    },
+    {
+      "path": "src/lib/utils.ts",
+      "description": "Utility functions",
+      "category": "util"
+    }
+  ],
+  "navigation": {
+    "tests": "src/**/*.test.ts",
+    "config": [
+      "package.json",
+      "tsconfig.json",
+      "tsconfig.*.json",
+      "eslint.config.js",
+      "vite.config.ts"
+    ],
+    "types": [
+      "src/vite-env.d.ts"
+    ],
+    "mainLogic": [
+      "src/lib"
+    ]
+  }
+}
