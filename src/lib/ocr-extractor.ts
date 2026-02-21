@@ -1,19 +1,23 @@
 import * as pdfjs from "pdfjs-dist";
 import { createWorker } from "tesseract.js";
 import type { ReviewItem, ReviewItemStatus } from "@/lib/report-session";
+import {
+  extractDateFromLine,
+  isLikelyHeaderLine,
+  isLikelyNonTransactionLine,
+  parseCurrencyValue,
+} from "@/lib/ocr-parser-utils";
 
 type ProgressCallback = (message: string, progress: number) => void;
 type DebugCallback = (payload: {
   textFromPdf: string;
   textFromOcr?: string;
+  ocrError?: string;
   parsedCount: number;
   sample: string[];
 }) => void;
 
-const FULL_DATE_REGEX = /(\d{2}[\/.-]\d{2}[\/.-]\d{2,4})/;
-const SHORT_DATE_REGEX = /(\d{2}[\/.-]\d{2})(?![\/.-]\d)/;
 const VALUE_REGEX_GLOBAL = /(?:R\$\s*)?-?\d{1,3}(?:[.\s]\d{3})*,\d{1,2}|(?:R\$\s*)?-?\d+[.,]\d{1,2}/g;
-const HEADER_MARKERS = ["DATA", "DESCR", "HISTOR", "SALDO", "LANCAMENTO", "LANÇAMENTO"];
 
 const reimbursableKeywords = [
   "UBER",
@@ -39,55 +43,6 @@ pdfjs.GlobalWorkerOptions.workerSrc = new URL(
   "pdfjs-dist/build/pdf.worker.min.mjs",
   import.meta.url,
 ).toString();
-
-const normalizeDate = (rawDate: string): string => {
-  const normalized = rawDate.replace(/[.-]/g, "/");
-  const [day, month, yearRaw] = normalized.split("/");
-  const year = yearRaw.length === 2 ? `20${yearRaw}` : yearRaw;
-  return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
-};
-
-const normalizeDateWithFallbackYear = (rawDate: string): string => {
-  const normalized = rawDate.replace(/[.-]/g, "/");
-  const parts = normalized.split("/");
-
-  if (parts.length === 2) {
-    const [day, month] = parts;
-    const year = String(new Date().getFullYear());
-    return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
-  }
-
-  return normalizeDate(rawDate);
-};
-
-const parseCurrencyValue = (rawValue: string): number => {
-  const cleaned = rawValue
-    .normalize("NFKC")
-    .replace(/[Rr]\s*\$/g, "")
-    .replace(/\s/g, "")
-    .replace(/[^0-9,.-]/g, "")
-    .trim();
-
-  if (!cleaned) {
-    return 0;
-  }
-
-  const lastComma = cleaned.lastIndexOf(",");
-  const lastDot = cleaned.lastIndexOf(".");
-
-  let normalized = cleaned;
-
-  if (lastComma > lastDot) {
-    normalized = cleaned.replace(/\./g, "").replace(",", ".");
-  } else if (lastDot > lastComma) {
-    normalized = cleaned.replace(/,/g, "");
-  }
-
-  normalized = normalized.replace(/(?!^)-/g, "");
-
-  const value = Number(normalized);
-  return Number.isFinite(value) ? value : 0;
-};
 
 const classifyTag = (description: string): { tag: string; status: ReviewItemStatus } => {
   const upper = description.toUpperCase();
@@ -123,38 +78,18 @@ const classifyTag = (description: string): { tag: string; status: ReviewItemStat
   };
 };
 
-const isLikelyHeaderLine = (line: string): boolean => {
-  const upper = line.toUpperCase();
-  return HEADER_MARKERS.some((marker) => upper.includes(marker));
-};
-
-const extractDateFromLine = (line: string): { rawDate: string; normalizedDate: string } | null => {
-  const fullDateMatch = line.match(FULL_DATE_REGEX);
-  if (fullDateMatch) {
-    return {
-      rawDate: fullDateMatch[1],
-      normalizedDate: normalizeDateWithFallbackYear(fullDateMatch[1]),
-    };
-  }
-
-  const shortDateMatch = line.match(SHORT_DATE_REGEX);
-  if (shortDateMatch) {
-    return {
-      rawDate: shortDateMatch[1],
-      normalizedDate: normalizeDateWithFallbackYear(shortDateMatch[1]),
-    };
-  }
-
-  return null;
-};
-
 const extractValueCandidates = (line: string): string[] => {
   return Array.from(line.matchAll(VALUE_REGEX_GLOBAL)).map((match) => match[0]);
 };
 
 const parseLineToItem = (line: string): ReviewItem | null => {
   const compactLine = line.replace(/\s+/g, " ").trim();
-  if (!compactLine || compactLine.length < 6 || isLikelyHeaderLine(compactLine)) {
+  if (
+    !compactLine ||
+    compactLine.length < 6 ||
+    isLikelyHeaderLine(compactLine) ||
+    isLikelyNonTransactionLine(compactLine)
+  ) {
     return null;
   }
 
@@ -295,6 +230,10 @@ const extractTextWithPdfJs = async (file: File, onProgress?: ProgressCallback): 
 };
 
 const extractTextWithOcr = async (file: File, onProgress?: ProgressCallback): Promise<string> => {
+  if (typeof document === "undefined") {
+    return "";
+  }
+
   onProgress?.("Executando OCR nas páginas...", 60);
 
   const worker = await createWorker("por+eng", 1, {
@@ -343,15 +282,28 @@ export const extractItemsFromPdf = async (
   onProgress?: ProgressCallback,
   onDebug?: DebugCallback,
 ): Promise<ReviewItem[]> => {
-  const textFromPdf = await extractTextWithPdfJs(file, onProgress);
+  let textFromPdf = "";
+  let ocrError: string | undefined;
+
+  try {
+    textFromPdf = await extractTextWithPdfJs(file, onProgress);
+  } catch {
+    onProgress?.("Leitura textual indisponível, tentando OCR...", 55);
+  }
+
   let candidateText = textFromPdf;
   let textFromOcr: string | undefined;
 
   const preliminaryItems = parseItemsFromLineCombinations(candidateText);
+  const shouldRunOcr = preliminaryItems.length === 0 || candidateText.trim().length < 120;
 
-  if (preliminaryItems.length === 0) {
-    textFromOcr = await extractTextWithOcr(file, onProgress);
-    candidateText = `${candidateText}\n${textFromOcr}`;
+  if (shouldRunOcr) {
+    try {
+      textFromOcr = await extractTextWithOcr(file, onProgress);
+      candidateText = `${candidateText}\n${textFromOcr}`;
+    } catch (error) {
+      ocrError = error instanceof Error ? error.message : "unknown_error";
+    }
   }
 
   const parsedItems = parseItemsFromLineCombinations(candidateText);
@@ -361,6 +313,7 @@ export const extractItemsFromPdf = async (
   onDebug?.({
     textFromPdf,
     textFromOcr,
+    ocrError,
     parsedCount: parsedItems.length,
     sample: candidateText.split(/\r?\n/).filter(Boolean).slice(0, 30),
   });
