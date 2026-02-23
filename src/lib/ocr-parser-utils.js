@@ -1,5 +1,6 @@
 const FULL_DATE_REGEX = /(\d{2}[/.-]\d{2}[/.-]\d{2,4})/;
 const SHORT_DATE_REGEX = /(\d{2}[/.-]\d{2})(?![/.-]\d)/;
+const NORMALIZED_DATE_REGEX = /^(\d{4})-(\d{2})-(\d{2})$/;
 const HEADER_MARKERS = ["DATA", "DESCR", "HISTOR", "SALDO", "LANCAMENTO", "LANÇAMENTO"];
 const NON_TRANSACTION_MARKERS = [
   "SALDO ANTERIOR",
@@ -43,6 +44,33 @@ export const normalizeDateWithFallbackYear = (rawDate) => {
   return normalizeDate(rawDate);
 };
 
+export const isValidNormalizedDate = (normalizedDate) => {
+  const match = normalizedDate.match(NORMALIZED_DATE_REGEX);
+  if (!match) {
+    return false;
+  }
+
+  const [, yearRaw, monthRaw, dayRaw] = match;
+  const year = Number(yearRaw);
+  const month = Number(monthRaw);
+  const day = Number(dayRaw);
+
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) {
+    return false;
+  }
+
+  if (month < 1 || month > 12 || day < 1 || day > 31) {
+    return false;
+  }
+
+  const utcDate = new Date(Date.UTC(year, month - 1, day));
+  return (
+    utcDate.getUTCFullYear() === year &&
+    utcDate.getUTCMonth() === month - 1 &&
+    utcDate.getUTCDate() === day
+  );
+};
+
 export const parseCurrencyValue = (rawValue) => {
   const cleaned = rawValue
     .normalize("NFKC")
@@ -80,17 +108,27 @@ export const parseCurrencyValue = (rawValue) => {
 export const extractDateFromLine = (line) => {
   const fullDateMatch = line.match(FULL_DATE_REGEX);
   if (fullDateMatch) {
+    const normalizedDate = normalizeDateWithFallbackYear(fullDateMatch[1]);
+    if (!isValidNormalizedDate(normalizedDate)) {
+      return null;
+    }
+
     return {
       rawDate: fullDateMatch[1],
-      normalizedDate: normalizeDateWithFallbackYear(fullDateMatch[1]),
+      normalizedDate,
     };
   }
 
   const shortDateMatch = line.match(SHORT_DATE_REGEX);
   if (shortDateMatch) {
+    const normalizedDate = normalizeDateWithFallbackYear(shortDateMatch[1]);
+    if (!isValidNormalizedDate(normalizedDate)) {
+      return null;
+    }
+
     return {
       rawDate: shortDateMatch[1],
-      normalizedDate: normalizeDateWithFallbackYear(shortDateMatch[1]),
+      normalizedDate,
     };
   }
 

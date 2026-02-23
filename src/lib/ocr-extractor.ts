@@ -82,6 +82,73 @@ const extractValueCandidates = (line: string): string[] => {
   return Array.from(line.matchAll(VALUE_REGEX_GLOBAL)).map((match) => match[0]);
 };
 
+const MAX_REASONABLE_VALUE = 1_000_000;
+
+const selectBestValueCandidate = (
+  compactLine: string,
+  valueCandidates: string[],
+  dateStartIndex: number,
+  dateLength: number,
+): { raw: string; index: number; value: number } | null => {
+  const dateEndIndex = dateStartIndex + dateLength;
+
+  const candidates = valueCandidates
+    .map((raw) => {
+      const index = compactLine.indexOf(raw, dateEndIndex);
+      const value = parseCurrencyValue(raw);
+      const hasTwoDecimalPlaces = /[.,]\d{2}$/.test(raw);
+
+      return { raw, index, value, hasTwoDecimalPlaces };
+    })
+    .filter((candidate) => {
+      return (
+        candidate.index > dateStartIndex &&
+        candidate.value > 0 &&
+        candidate.value <= MAX_REASONABLE_VALUE
+      );
+    })
+    .sort((a, b) => {
+      if (a.hasTwoDecimalPlaces !== b.hasTwoDecimalPlaces) {
+        return a.hasTwoDecimalPlaces ? -1 : 1;
+      }
+
+      return b.index - a.index;
+    });
+
+  if (candidates.length === 0) {
+    return null;
+  }
+
+  const { raw, index, value } = candidates[0];
+  return { raw, index, value };
+};
+
+const isLikelyNoiseDescription = (description: string): boolean => {
+  const trimmed = description.trim();
+  if (trimmed.length < 3) {
+    return true;
+  }
+
+  const letters = (trimmed.match(/[A-Za-zÀ-ÖØ-öø-ÿ]/g) ?? []).length;
+  const digits = (trimmed.match(/\d/g) ?? []).length;
+  const uuidLike = /^[a-f0-9]{8,}(?:-[a-f0-9]{4,})+$/i.test(trimmed);
+
+  if (uuidLike) {
+    return true;
+  }
+
+  if (letters === 0) {
+    return true;
+  }
+
+  const mostlyNumericSingleToken = !trimmed.includes(" ") && digits > letters * 2;
+  if (mostlyNumericSingleToken) {
+    return true;
+  }
+
+  return false;
+};
+
 const parseLineToItem = (line: string): ReviewItem | null => {
   const compactLine = line.replace(/\s+/g, " ").trim();
   if (
@@ -104,10 +171,19 @@ const parseLineToItem = (line: string): ReviewItem | null => {
   }
 
   const dateRaw = dateData.rawDate;
-  const valueRaw = valueCandidates[0];
-
   const dateIndex = compactLine.indexOf(dateRaw);
-  const valueIndex = compactLine.indexOf(valueRaw, dateIndex + dateRaw.length);
+  const selectedValue = selectBestValueCandidate(
+    compactLine,
+    valueCandidates,
+    dateIndex,
+    dateRaw.length,
+  );
+
+  if (!selectedValue) {
+    return null;
+  }
+
+  const { raw: valueRaw, index: valueIndex, value } = selectedValue;
 
   if (valueIndex <= dateIndex) {
     return null;
@@ -118,9 +194,7 @@ const parseLineToItem = (line: string): ReviewItem | null => {
     .replace(/^[\s-–—]+|[\s-–—]+$/g, "")
     .trim();
 
-  const value = parseCurrencyValue(valueRaw);
-
-  if (!description || value <= 0) {
+  if (!description || value <= 0 || isLikelyNoiseDescription(description)) {
     return null;
   }
 

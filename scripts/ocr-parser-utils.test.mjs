@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   extractDateFromLine,
+  isValidNormalizedDate,
   isLikelyNonTransactionLine,
   parseCurrencyValue,
 } from "../src/lib/ocr-parser-utils.js";
@@ -32,4 +33,14 @@ test("extractDateFromLine parses full date", () => {
 test("extractDateFromLine infers year for short date", () => {
   const extracted = extractDateFromLine("07/02 UBER 32,90");
   assert.ok(extracted?.normalizedDate.match(/^\d{4}-02-07$/));
+});
+
+test("extractDateFromLine rejects impossible calendar dates", () => {
+  const extracted = extractDateFromLine("31/02/2025 Uber 49,90");
+  assert.equal(extracted, null);
+});
+
+test("isValidNormalizedDate validates leap years correctly", () => {
+  assert.equal(isValidNormalizedDate("2024-02-29"), true);
+  assert.equal(isValidNormalizedDate("2025-02-29"), false);
 });

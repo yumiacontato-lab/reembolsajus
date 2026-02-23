@@ -40,6 +40,16 @@ const tagConfig: Record<string, { icon: React.ElementType; color: string }> = {
 
 type FilterType = "all" | "reimbursable" | "possible";
 
+const formatItemDate = (rawDate: string): string => {
+  const parsed = new Date(`${rawDate}T00:00:00`);
+
+  if (Number.isNaN(parsed.getTime())) {
+    return "Data inválida";
+  }
+
+  return parsed.toLocaleDateString("pt-BR");
+};
+
 const parseCurrencyInput = (raw: string): number => {
   const normalized = raw.replace(/\s/g, "").replace(/\./g, "").replace(",", ".");
   const parsed = Number(normalized);
@@ -329,7 +339,7 @@ const Review = () => {
                           </td>
                           <td className="py-4 px-4">
                             <span className="text-sm text-foreground font-mono">
-                              {new Date(item.date).toLocaleDateString('pt-BR')}
+                              {formatItemDate(item.date)}
                             </span>
                           </td>
                           <td className="py-4 px-4">
